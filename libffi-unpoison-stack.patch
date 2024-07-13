@@ -1,0 +1,153 @@
+From 087c6367e02a32f42eff934454eccd5ed37c26a9 Mon Sep 17 00:00:00 2001
+From: KJ Tsanaktsidis <ktsanaktsidis@zendesk.com>
+Date: Thu, 6 Jun 2024 13:15:28 +1000
+Subject: [PATCH] Unpoison alloca used in stack adjustments when ASAN
+
+The pattern for several of the architectures is for ffi_call_int to
+stack-allocate some arguments + the registers, and then
+ffi_call_$ARCH will pop the top of that structure into registers, and
+then adjust the stack pointer such that the alloca'd buffer _becomes_
+the stack-passed arguments for the function being called.
+
+If libffi is compiled with ASAN, then there will be a redzone inserted
+after the alloca'd buffer which is marked as poisoned. This redzone
+appears beyond the end of $sp upon entry to the called function.
+
+If the called function does anything to use this stack memory, ASAN will
+notice that it's poisoned and report an error.
+
+This commit fixes the situation (on the architectures that I have access
+to) by manually unpoisoning the alloca'd buffer's redzone. The
+alternative approach would be to disable instrumentation for
+ffi_call_int altogether, which I can also do if we think that's
+preferable.
+---
+ include/ffi_common.h | 16 ++++++++++++++++
+ src/aarch64/ffi.c    |  7 +++++++
+ src/debug.c          | 23 +++++++++++++++++++++++
+ src/x86/ffi.c        |  7 +++++++
+ src/x86/ffi64.c      |  7 +++++++
+ 5 files changed, 60 insertions(+)
+
+diff --git a/include/ffi_common.h b/include/ffi_common.h
+index 2bd31b0..e51b54f 100644
+--- a/include/ffi_common.h
++++ b/include/ffi_common.h
+@@ -86,6 +86,22 @@ void ffi_assert(char *expr, char *file, int line);
+ void ffi_stop_here(void);
+ void ffi_type_test(ffi_type *a, char *file, int line);
+ 
++#ifndef __SANITIZE_ADDRESS__
++# ifdef __clang__
++#  if __has_feature(address_sanitizer)
++#   define FFI_ASAN
++#  endif
++# endif
++#endif
++#ifdef __SANITIZE_ADDRESS__
++#define FFI_ASAN
++#endif
++
++#ifdef FFI_ASAN
++void ffi_asan_unpoison_alloca_left(void *alloca_ptr);
++#endif
++
++
+ #define FFI_ASSERT(x) ((x) ? (void)0 : ffi_assert(#x, __FILE__,__LINE__))
+ #define FFI_ASSERT_AT(x, f, l) ((x) ? 0 : ffi_assert(#x, (f), (l)))
+ #define FFI_ASSERT_VALID_TYPE(x) ffi_type_test (x, __FILE__, __LINE__)
+diff --git a/src/aarch64/ffi.c b/src/aarch64/ffi.c
+index 6544ac0..d21453d 100644
+--- a/src/aarch64/ffi.c
++++ b/src/aarch64/ffi.c
+@@ -813,6 +813,13 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *orig_rvalue,
+ #endif
+     }
+ 
++#ifdef FFI_ASAN
++  /* ffi_call_SYSV will steal the alloca'd `stack` variable here for use
++     _as its own stack_ - so we need to remove the ASAN redzones from it
++     so that the top of the stack remains unpoisoned */
++  ffi_asan_unpoison_alloca_left(context);
++#endif
++
+   ffi_call_SYSV (context, frame, fn, rvalue, flags, closure);
+ 
+   if (flags & AARCH64_RET_NEED_COPY)
+diff --git a/src/debug.c b/src/debug.c
+index f3172b1..e4fe8ee 100644
+--- a/src/debug.c
++++ b/src/debug.c
+@@ -26,6 +26,10 @@
+ #include <ffi_common.h>
+ #include <stdlib.h>
+ #include <stdio.h>
++#include <stdint.h>
++#ifdef FFI_ASAN
++#include <sanitizer/asan_interface.h>
++#endif
+ 
+ /* General debugging routines */
+ 
+@@ -62,3 +66,22 @@ void ffi_type_test(ffi_type *a, char *file, int line)
+ 		file, line);
+ 
+ }
++
++#ifdef FFI_ASAN
++__attribute__((no_sanitize_address))
++void ffi_asan_unpoison_alloca_left(void *alloca_ptr) {
++  size_t shadow_scale, shadow_offset;
++
++  __asan_get_shadow_mapping(&shadow_scale, &shadow_offset);
++  /* Assert that the pointer is aligned to the ASAN shadow stack
++     (i.e. 8-bytes on 64bit) */
++  FFI_ASSERT(((uintptr_t)alloca_ptr) % (1 >> (shadow_scale - 1)) == 0);
++  unsigned char *shadow_stack_ptr = (unsigned char *)((((uintptr_t)alloca_ptr) >> shadow_scale) + shadow_offset);
++  shadow_stack_ptr--;
++
++  while (*shadow_stack_ptr == 0xCA) {
++    *shadow_stack_ptr = 0;
++    shadow_stack_ptr--;
++  }
++}
++#endif
+diff --git a/src/x86/ffi.c b/src/x86/ffi.c
+index b8bb178..df4bde9 100644
+--- a/src/x86/ffi.c
++++ b/src/x86/ffi.c
+@@ -403,6 +403,13 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
+     }
+   FFI_ASSERT (dir > 0 || argp == stack);
+ 
++#ifdef FFI_ASAN
++  /* ffi_call_i386 will steal the alloca'd `stack` variable here for use
++     _as its own stack_ - so we need to remove the ASAN redzones from it
++     so that the top of the stack remains unpoisoned */
++  ffi_asan_unpoison_alloca_left(stack);
++#endif
++
+   ffi_call_i386 (frame, stack);
+ }
+ #if defined(_MSC_VER)
+diff --git a/src/x86/ffi64.c b/src/x86/ffi64.c
+index 6a8e37f..28cd785 100644
+--- a/src/x86/ffi64.c
++++ b/src/x86/ffi64.c
+@@ -670,6 +670,13 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
+     }
+   reg_args->rax = ssecount;
+ 
++#ifdef FFI_ASAN
++  /* ffi_call_unix64 will steal the alloca'd `stack` variable here for use
++     _as its own stack_ - so we need to remove the ASAN redzones from it
++     so that the top of the stack remains unpoisoned */
++  ffi_asan_unpoison_alloca_left(stack);
++#endif
++
+   ffi_call_unix64 (stack, cif->bytes + sizeof (struct register_args),
+ 		   flags, rvalue, fn);
+ }
+-- 
+2.45.2
+
