@@ -9,7 +9,7 @@ pipeline {
     }
     stage('Push Image') {
       steps {
-        withCredentials([stirng(credentialsId: 'podman-auth.json', file: 'REGISTRY_AUTH_FILE')]) {
+        withCredentials([file(credentialsId: 'podman-auth.json', file: 'REGISTRY_AUTH_FILE')]) {
           sh "podman push quay.io/kjtsanaktsidis/ruby-rr-ci/sources:${env.GIT_COMMIT} ."
           sh "podman push quay.io/kjtsanaktsidis/ruby-rr-ci:${env.GIT_COMMIT} ."
         }
