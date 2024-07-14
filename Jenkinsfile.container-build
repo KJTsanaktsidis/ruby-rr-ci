@@ -1,0 +1,11 @@
+pipeline {
+  agent any
+  stages {
+    stage('Build Image') {
+      steps {
+        sh 'podman build --target sources --tag quay.io/kjtsanaktsidis/ruby-rr-ci/sources:${env.GIT_COMMIT} .'
+        sh 'podman build --tag quay.io/kjtsanaktsidis/ruby-rr-ci:${env.GIT_COMMIT} .'
+      }
+    }
+  }
+}
