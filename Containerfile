@@ -22,8 +22,8 @@ RUN <<BASHSCRIPT
   dnf install -y "${PACKAGES[@]}"
   dnf builddep -y openssl libyaml libffi rr
 
-  git config --global user.name "ruby_rr_ci builder"
-  git config --global user.email "ruby_rr_ci_builder@$(hostname)"
+  git config --global user.name "ruby-rr-ci builder"
+  git config --global user.email "ruby-rr-ci-builder@$(hostname)"
 
   mkdir /usr/local/asan
   mkdir /usr/local/asan/lib
@@ -211,8 +211,8 @@ RUN <<BASHSCRIPT
   dnf update --refresh -y
   dnf install -y "${PACKAGES[@]}"
 
-  git config --global user.name "ruby_rr_ci builder"
-  git config --global user.email "ruby_rr_ci_builder@$(hostname)"
+  git config --global user.name "ruby-rr-ci builder"
+  git config --global user.email "ruby-rr-ci-builder@$(hostname)"
 BASHSCRIPT
 
 COPY build-ruby.rb /usr/local/bin/
