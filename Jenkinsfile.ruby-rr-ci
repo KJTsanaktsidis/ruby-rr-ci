@@ -44,11 +44,11 @@ pipeline {
         }
       }
     }
-  }
-  stage('Build') {
-    steps {
-      sh "would test ruby ${params.RUBY_COMMIT} with ruby-rr-ci ${params.RUBY_RR_CI_COMMIT} here"
-      sh "podman run quay.io/kjtsanaktsidis/ruby-rr-ci:${params.RUBY_RR_CI_COMMIT} cat /etc/os-relese"
+    stage('Build') {
+      steps {
+        sh "would test ruby ${params.RUBY_COMMIT} with ruby-rr-ci ${params.RUBY_RR_CI_COMMIT} here"
+        sh "podman run quay.io/kjtsanaktsidis/ruby-rr-ci:${params.RUBY_RR_CI_COMMIT} cat /etc/os-relese"
+      }
     }
   }
 }
