@@ -1,6 +1,17 @@
 pipeline {
   agent any
   stages {
+    stage('Checkout') {
+      steps {
+        checkout scmGit(
+          userRemoteConfigs: [[
+            credentialsId: 'github-pat',
+            url: 'https://github.com/KJTsanaktsidis/ruby-rr-ci.git',
+          ]],
+          branches: [[name: "${env.GIT_COMMIT}"]],
+        )
+      }
+    }
     stage('Build Image') {
       steps {
         sh "podman build --no-cache --target sources --tag quay.io/kjtsanaktsidis/ruby-rr-ci/sources:${env.GIT_COMMIT} ."
