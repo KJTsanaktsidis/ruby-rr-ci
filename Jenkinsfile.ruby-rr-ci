@@ -7,10 +7,7 @@ pipeline {
     string(
       name: 'RUBY_RR_CI_COMMIT',
       description: 'Souce and image of https://github.com/KJTsanaktsidis/ruby-rr-ci to use',
-      defaultValue: Jenkins.instance.getItemByFullName('ruby-rr-ci Tester Image/main')
-                                    .getLastSuccessfulBuild()
-                                    .getAction(hudson.plugins.git.util.BuildData.class)
-                                    .lastBuiltRevision.sha1String
+      defaultValue: rubyRRCIShared.latestVersion(),
     )
     string(
       name: 'RUBY_COMMIT',
