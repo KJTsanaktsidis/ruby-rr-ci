@@ -7,7 +7,7 @@ pipeline {
     string(
       name: 'RUBY_RR_CI_COMMIT',
       description: 'Souce and image of https://github.com/KJTsanaktsidis/ruby-rr-ci to use',
-      defaultValue: rubyRRCIShared.latestVersion(),
+      defaultValue: au.id.kjtsanaktsidis.rubyRRCIShared.latestVersion(),
     )
     string(
       name: 'RUBY_COMMIT',
