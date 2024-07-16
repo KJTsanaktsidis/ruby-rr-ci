@@ -1,4 +1,4 @@
-class rubyRRCIShared {
+class RubyRRCIShared {
     static def latestVersion() {
       Jenkins.instance.getItemByFullName('ruby-rr-ci Tester Image/main')
                       .getLastSuccessfulBuild()
