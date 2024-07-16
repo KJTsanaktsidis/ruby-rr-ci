@@ -43,7 +43,9 @@ pipeline {
       }
     }
     stage('Post-build') {
-      build 'ruby-rr-ci', wait: false
+      steps {
+        build '/ruby-rr-ci', wait: false
+      }
     }
   }
 }
