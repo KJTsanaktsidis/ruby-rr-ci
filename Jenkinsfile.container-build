@@ -1,8 +1,7 @@
 pipeline {
   agent any
   triggers {
-    // cron '0 2 * * 6' // 2:00 AM Saturday, Melbourne time
-    cron '10 20 * * *'
+    cron '0 2 * * 6' // 2:00 AM Saturday, Melbourne time
   }
   stages {
     stage('Checkout') {
@@ -13,11 +12,6 @@ pipeline {
             url: 'https://github.com/KJTsanaktsidis/ruby-rr-ci.git',
           ]],
           branches: [[name: "${env.GIT_COMMIT}"]],
-          // Don't publish github check if we were built on a timer
-          extensions: [[
-            $class: 'GitSCMStatusChecksExtension',
-            skip: currentBuild.getBuildCauses('hudson.triggers.TimerTrigger$TimerTriggerCause').isEmpty()
-          ]]
         )
       }
     }
