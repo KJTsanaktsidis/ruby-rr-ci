@@ -1,5 +1,23 @@
 pipeline {
   agent any
+  triggers {
+    cron '0 1 * * *'
+  }
+  parameters {
+    string(
+      name: 'RUBY_RR_CI_COMMIT',
+      description: 'Souce and image of https://github.com/KJTsanaktsidis/ruby-rr-ci to use'
+      defaultValue: Jenkins.instance.getItemByFullName('ruby-rr-ci Tester Image/main')
+                                    .getLastSuccessfulBuild()
+                                    .getAction(hudson.plugins.git.util.BuildData.class)
+                                    .lastBuiltRevision.sha1String
+    )
+    string(
+      name: 'RUBY_COMMIT',
+      description: 'Ruby commit to test',
+      defaultValue: 'master',
+    )
+  }
   stages {
     stage('Checkout') {
       steps {
@@ -9,7 +27,7 @@ pipeline {
               credentialsId: 'github-pat',
               url: 'https://github.com/KJTsanaktsidis/ruby-rr-ci.git',
             ]],
-            branches: [[name: "main"]],
+            branches: [[name: params.RUBY_RR_CI_COMMIT]],
           )
         }
         dir('ruby') {
@@ -18,10 +36,19 @@ pipeline {
               credentialsId: 'github-pat',
               url: 'https://github.com/KJTsanaktsidis/ruby-rr-ci.git',
             ]],
-            branches: [[name: "master"]],
+            branches: [[name: params.RUBY_COMMIT]],
           )
         }
+        withCredentials([file(credentialsId: 'podman-auth.json', variable: 'REGISTRY_AUTH_FILE')]) {
+          sh "podman pull quay.io/kjtsanaktsidis/ruby-rr-ci:${params.RUBY_RR_CI_COMMIT"
+        }
       }
+    }
+  }
+  stage('Build') {
+    steps {
+      sh "would test ruby ${params.RUBY_COMMIT} with ruby-rr-ci ${params.RUBY_RR_CI_COMMIT} here"
+      sh "podman run quay.io/kjtsanaktsidis/ruby-rr-ci:${params.RUBY_RR_CI_COMMIT cat /etc/os-relese"
     }
   }
 }
