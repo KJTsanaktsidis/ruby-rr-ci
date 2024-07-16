@@ -6,7 +6,7 @@ pipeline {
   parameters {
     string(
       name: 'RUBY_RR_CI_COMMIT',
-      description: 'Souce and image of https://github.com/KJTsanaktsidis/ruby-rr-ci to use'
+      description: 'Souce and image of https://github.com/KJTsanaktsidis/ruby-rr-ci to use',
       defaultValue: Jenkins.instance.getItemByFullName('ruby-rr-ci Tester Image/main')
                                     .getLastSuccessfulBuild()
                                     .getAction(hudson.plugins.git.util.BuildData.class)
