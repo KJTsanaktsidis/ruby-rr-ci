@@ -214,5 +214,3 @@ RUN <<BASHSCRIPT
   git config --global user.name "ruby-rr-ci builder"
   git config --global user.email "ruby-rr-ci-builder@$(hostname)"
 BASHSCRIPT
-
-COPY build-ruby.rb /usr/local/bin/

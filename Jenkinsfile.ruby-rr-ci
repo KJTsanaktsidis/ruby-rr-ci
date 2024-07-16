@@ -1,0 +1,27 @@
+pipeline {
+  agent any
+  stages {
+    stage('Checkout') {
+      steps {
+        dir('ruby-rr-ci') {
+          checkout scmGit(
+            userRemoteConfigs: [[
+              credentialsId: 'github-pat',
+              url: 'https://github.com/KJTsanaktsidis/ruby-rr-ci.git',
+            ]],
+            branches: [[name: "main"]],
+          )
+        }
+        dir('ruby') {
+          checkout scmGit(
+            userRemoteConfigs: [[
+              credentialsId: 'github-pat',
+              url: 'https://github.com/KJTsanaktsidis/ruby-rr-ci.git',
+            ]],
+            branches: [[name: "master"]],
+          )
+        }
+      }
+    }
+  }
+}
