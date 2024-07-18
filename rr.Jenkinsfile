@@ -47,9 +47,11 @@ pipeline {
           def imageDigest = imageJsonSlurp[0].Digest
           def rubyVersion = sh(script: 'cd ruby; git rev-parse HEAD').trim()
 
-          setCustomBuildProperty(key: 'image_version', value: "quay.io/kjtsanaktsidis/ruby-rr-ci@sha256:${imagedigest}")
-          setCustomBuildProperty(key: 'ruby_rr_ci_version', value: "${env.GIT_COMMIT}")
-          setCustomBuildProperty(key: 'ruby_version', value: "${rubyVersion}")
+          // setCustomBuildProperty(key: 'image_version', value: "quay.io/kjtsanaktsidis/ruby-rr-ci@sha256:${imagedigest}")
+          // setCustomBuildProperty(key: 'ruby_rr_ci_version', value: "${env.GIT_COMMIT}")
+          // setCustomBuildProperty(key: 'ruby_version', value: "${rubyVersion}")
+          //
+          echo "yeet: ${imageDigest} ${rubyVersion}"
         }
       }
     }
