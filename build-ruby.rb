@@ -109,20 +109,18 @@ def _run_test(opts, testtask, test_file)
   # Delete the unzipped trace dir (it's quite big)
   rm_rf trace_dir if opts[:rr]
 
+  puts "=> Test #{test_file} #{success ? 'PASS' : 'FAIL'}"
   return success
 end
 
 def do_btest(opts)
   puts "=> Running bootstrap tests"
   chdir 'build' do
-    success = true
     test_files = Dir.glob('../bootstraptest/**/test_*.rb')
     successes = test_files.map do |test_file|
       _run_test(opts, 'btest', test_file)
     end
-    unless successes.all? { _1 }
-      raise "One or more tests failed; see output for details"
-    end
+    raise "One or more tests failed; see output for details" unless successes.all?
   end
 end
 
