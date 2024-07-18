@@ -23,7 +23,7 @@ pipeline {
     )
   }
   stages {
-    stage('Checkout') {
+    stage('Prepare') {
       steps {
         dir('ruby') {
           checkout scmGit(
@@ -50,12 +50,32 @@ pipeline {
           setCustomBuildProperty(key: 'image_version', value: "quay.io/kjtsanaktsidis/ruby-rr-ci@sha256:${imageDigest}")
           setCustomBuildProperty(key: 'ruby_rr_ci_version', value: "${env.GIT_COMMIT}")
           setCustomBuildProperty(key: 'ruby_version', value: "${rubyVersion}")
+          setCustomBuildProperty(key: 'rr', value: "true")
+          setCustomBuildProperty(key: 'chaos', value: "false")
+          setCustomBuildProperty(key: 'asan', value: "false")
         }
       }
     }
-    stage('Build') {
+    stage('Build ruby') {
       steps {
-        sh "podman run quay.io/kjtsanaktsidis/ruby-rr-ci:${params.RUBY_RR_CI_IMAGE_TAG} cat /etc/os-release"
+        sh """
+          podman run --rm \
+            -v "$(realpath .):/ruby-rr-ci" \
+            --workdir /ruby-rr-ci/ruby \
+            quay.io/kjtsanaktsidis/ruby-rr-ci:${params.RUBY_RR_CI_IMAGE_TAG} \
+            ../build-ruby.rb --build
+        """
+      }
+    }
+    stage('Run tests') {
+      steps {
+        sh """
+          podman run --rm \
+            -v "$(realpath .):/ruby-rr-ci" \
+            --workdir /ruby-rr-ci/ruby \
+            quay.io/kjtsanaktsidis/ruby-rr-ci:${params.RUBY_RR_CI_IMAGE_TAG} \
+            ../build-ruby.rb --btest
+        """
       }
     }
   }
