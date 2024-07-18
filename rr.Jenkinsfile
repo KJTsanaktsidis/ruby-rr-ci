@@ -39,13 +39,13 @@ pipeline {
         }
 
         script {
+          def rubyVersion = sh(script: 'git rev-parse HEAD', returnStdout: true)
           def imageJson = sh(
             script: "podman image inspect quay.io/kjtsanaktsidis/ruby-rr-ci:${params.RUBY_RR_CI_IMAGE_TAG}",
             returnStdout: true
           )
           def imageJsonSlurp = new JsonSlurper().parseText(imageJson)
           def imageDigest = imageJsonSlurp[0].Digest
-          def rubyVersion = sh(script: 'git rev-parse HEAD', returnStdout: true)
           // def rubyVersion = 'surprise!'
 
           setCustomBuildProperty(key: 'image_version', value: "quay.io/kjtsanaktsidis/ruby-rr-ci@sha256:${imageDigest}")
