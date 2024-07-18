@@ -100,17 +100,19 @@ def _run_test(opts, testtask, test_file)
 
   begin
     sh! *test_cmdline
-  rescue
-    success = false
+  rescue => e
+    puts "=> Test #{test_file} FAIL: #{e}"
+    result = false
     # On failure, pack the trace dir if we were tracing
     sh! '/opt/asan-dist/bin/rr', 'pack', trace_dir if opts[:rr]
     sh! 'tar', '-czv', '-f', File.join(test_output_dir, 'rr_trace.tar.gz'), '-C', test_output_dir, 'rr_trace'
+  else
+    puts "=> Test #{test_file} PASS"
   end
   # Delete the unzipped trace dir (it's quite big)
   rm_rf trace_dir if opts[:rr]
 
-  puts "=> Test #{test_file} #{success ? 'PASS' : 'FAIL'}"
-  return success
+  return result
 end
 
 def do_btest(opts)
