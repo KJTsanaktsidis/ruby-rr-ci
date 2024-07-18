@@ -48,7 +48,7 @@ pipeline {
           // def rubyVersion = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
           def rubyVersion = 'surprise!'
 
-          setCustomBuildProperty(key: 'image_version', value: "quay.io/kjtsanaktsidis/ruby-rr-ci@sha256:${imagedigest}")
+          setCustomBuildProperty(key: 'image_version', value: "quay.io/kjtsanaktsidis/ruby-rr-ci@sha256:${imageDigest}")
           setCustomBuildProperty(key: 'ruby_rr_ci_version', value: "${env.GIT_COMMIT}")
           setCustomBuildProperty(key: 'ruby_version', value: "${rubyVersion}")
         }
