@@ -69,7 +69,7 @@ def do_build(opts)
       "hardenflags=#{hardenflags.join(' ')}",
       "cppflags=#{cppflags.join(' ')}",
       "LDFLAGS=#{ldflags.join(' ')}"
-    sh! 'make', '-j'
+    sh! 'make'
   end
 end
 
