@@ -59,6 +59,14 @@ pipeline {
     }
     stage('Build ruby') {
       steps {
+        sh 'id -Z'
+        sh """
+          podman run --rm \
+            -v "\$(realpath .):/ruby-rr-ci" \
+            --workdir /ruby-rr-ci/ruby \
+            quay.io/kjtsanaktsidis/ruby-rr-ci:${params.RUBY_RR_CI_IMAGE_TAG} \
+            id -Z
+        """
         sh """
           podman run --rm \
             -v "\$(realpath .):/ruby-rr-ci" \
