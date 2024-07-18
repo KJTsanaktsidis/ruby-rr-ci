@@ -1,10 +1,16 @@
 #!/usr/bin/env ruby
 
+puts 'loading optparse'
 require 'optparse'
+puts 'loading fileutils'
 require 'fileutils'
+puts 'loading tmpdir'
 require 'tmpdir'
+puts 'loading shellwords'
 require 'shellwords'
+puts 'loading open3'
 require 'open3'
+puts 'loading pathname'
 require 'pathname'
 
 CONFIGURE_FLAGS = %w[--disable-install-doc --enable-yjit]
