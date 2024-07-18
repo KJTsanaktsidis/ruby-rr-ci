@@ -45,8 +45,8 @@ pipeline {
           )
           def imageJsonSlurp = new JsonSlurper().parseText(imageJson)
           def imageDigest = imageJsonSlurp[0].Digest
-          // def rubyVersion = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
-          def rubyVersion = 'surprise!'
+          def rubyVersion = sh(script: 'git rev-parse HEAD', returnStdout: true)
+          // def rubyVersion = 'surprise!'
 
           setCustomBuildProperty(key: 'image_version', value: "quay.io/kjtsanaktsidis/ruby-rr-ci@sha256:${imageDigest}")
           setCustomBuildProperty(key: 'ruby_rr_ci_version', value: "${env.GIT_COMMIT}")
