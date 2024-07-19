@@ -2,6 +2,17 @@
 import au.id.kjtsanaktsidis.RubyRRCIShared
 import groovy.json.JsonSlurper
 
+fullImageName = ''
+def podmanRun(cmd) {
+    sh """
+      podman run --rm \
+        -v "\$(realpath .):/ruby-rr-ci:Z" \
+        --workdir /ruby-rr-ci/ruby \
+        ${fullImageName} \
+        ${cmd}
+    """
+}
+
 pipeline {
   agent any
   triggers {
@@ -47,8 +58,9 @@ pipeline {
           )
           def imageJsonSlurp = new JsonSlurper().parseText(imageJson)
           def imageDigest = imageJsonSlurp[0].Digest
+          fullImageName = "quay.io/kjtsanaktsidis/ruby-rr-ci@${imageDigest}"
 
-          setCustomBuildProperty(key: 'image_version', value: "quay.io/kjtsanaktsidis/ruby-rr-ci@sha256:${imageDigest}")
+          setCustomBuildProperty(key: 'image_version', value: "${fullImageName}")
           setCustomBuildProperty(key: 'ruby_rr_ci_version', value: "${env.GIT_COMMIT}")
           setCustomBuildProperty(key: 'ruby_version', value: "${rubyVersion}")
           setCustomBuildProperty(key: 'rr', value: "true")
@@ -59,24 +71,12 @@ pipeline {
     }
     stage('Build ruby') {
       steps {
-        sh """
-          podman run --rm \
-            -v "\$(realpath .):/ruby-rr-ci:Z" \
-            --workdir /ruby-rr-ci/ruby \
-            quay.io/kjtsanaktsidis/ruby-rr-ci:${params.RUBY_RR_CI_IMAGE_TAG} \
-            ../build-ruby.rb --build
-        """
+        podmanRun('../build-ruby.rb --build')
       }
     }
     stage('Run tests') {
       steps {
-        sh """
-          podman run --rm \
-            -v "\$(realpath .):/ruby-rr-ci:Z" \
-            --workdir /ruby-rr-ci/ruby \
-            quay.io/kjtsanaktsidis/ruby-rr-ci:${params.RUBY_RR_CI_IMAGE_TAG} \
-            ../build-ruby.rb --btest
-        """
+        podmanRun('../build-ruby.rb --btest')
       }
     }
   }
