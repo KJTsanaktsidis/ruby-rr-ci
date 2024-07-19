@@ -13,7 +13,6 @@ DEBUGFLAGS=%w[-ggdb3 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer]
 HARDENFLAGS=%w[-U_FORTIFY_SOUCE -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fcf-protection=full]
 CPPFLAGS=%w[-DENABLE_PATH_CHECK=0 -DRUBY_DEBUG=1 -DVM_CHECK_MODE=1]
 LDFLAGS=%w[]
-ENV['PATH'] = "/opt/asan-dist/bin:#{ENV['PATH']}"
 
 include FileUtils::Verbose
 @fileutils_label = "==> "
@@ -53,7 +52,7 @@ def do_build(opts)
     cppflags = CPPFLAGS.dup
     if opts[:asan]
       hardenflags << "-fsanitize=address"
-      ldflags << "-Wl,-rpath=/opt/asan-dist/lib"
+      ldflags << "-Wl,-rpath=/usr/local/asan/lib -L/usr/local/asan/lib"
       configure_flags << "CC=clang"
       cppflags << "-DUSE_MN_THREADS=0"
     end
@@ -105,7 +104,7 @@ def _run_test(opts, testtask, test_file)
     puts "=> Test #{test_file} FAIL: #{e}"
     result = false
     # On failure, pack the trace dir if we were tracing
-    sh! '/opt/asan-dist/bin/rr', 'pack', trace_dir if opts[:rr]
+    sh! 'rr', 'pack', trace_dir if opts[:rr]
     sh! 'tar', '-czv', '-f', File.join(test_output_dir, 'rr_trace.tar.gz'), '-C', test_output_dir, 'rr_trace'
   else
     puts "=> Test #{test_file} PASS"
