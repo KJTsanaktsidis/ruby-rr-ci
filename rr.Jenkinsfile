@@ -3,11 +3,14 @@ import au.id.kjtsanaktsidis.RubyRRCIShared
 import groovy.json.JsonSlurper
 
 fullImageName = ''
-def podmanRun(cmd) {
+def podmanRun(cmd, pcore = false) {
+    def cpusetFlags = ''
+    if (pcore) { cpuSetFlags = "--cpuset-cpus=0-7" }
     sh """
       podman run --rm \
         -v "\$(realpath .):/ruby-rr-ci:Z" \
         --workdir /ruby-rr-ci/ruby \
+        ${cpusetFlags} \
         ${fullImageName} \
         ${cmd}
     """
@@ -76,7 +79,7 @@ pipeline {
     }
     stage('Run tests') {
       steps {
-        podmanRun('../build-ruby.rb --btest')
+        podmanRun('../build-ruby.rb --btest --rr')
       }
     }
   }
