@@ -94,12 +94,13 @@ def _run_test(opts, testtask, test_file)
   trace_dir = File.join(test_output_dir, 'rr_trace')
   if opts[:rr]
     test_cmdline = [
-      '/opt/asan-dist/bin/rr', 'record', '--output-trace-dir', trace_dir, '--'
+      'taskset', '-c', $WORKING_RR_CPUS.join(','),
+      'rr', 'record', '--output-trace-dir', trace_dir, '--'
     ] + test_cmdline
   end
 
   begin
-    sh! *test_cmdline
+    sh!(*test_cmdline)
   rescue => e
     puts "=> Test #{test_file} FAIL: #{e}"
     result = false
@@ -126,6 +127,27 @@ def do_btest(opts)
   end
 end
 
+def check_working_perf_counters!
+  puts "=> Checking which CPUs have working perf counters"
+  cpu_csv = sh_capture!('lscpu', '--all', '--parse')
+  cpu_lines = cpu_csv.lines.grep_v(/^\#/).map(&:strip).map { _1.split(',') }
+  cpu_numbers = cpu_lines.map { _1[0].to_i }
+  $WORKING_RR_CPUS = cpu_numbers.select do |cpu|
+    Dir.mktmpdir do |tracedir|
+      _, _, status = Open3.capture3(
+        'rr', 'record', '--bind-to-cpu', cpu.to_s, '--output-trace-dir', File.join(tracedir, 'trace'), 'true'
+      )
+      status.success?
+    end
+  end
+  if $WORKING_RR_CPUS.empty?
+    puts "=> No CPUs appear to have working perf counters."
+    puts "=> rr output is as follows:"
+    sh! 'rr', 'record', 'true'
+  end
+  puts "=> CPUs #{$WORKING_RR_CPUS.join(', ')} have working perf counters"
+end
+
 options = {
   steps: [],
   asan: false,
@@ -150,5 +172,6 @@ OptionParser.new do |opts|
   end
 end.parse!
 
+check_working_perf_counters! if options[:rr]
 options[:steps].each { _1.call(options) }
 
