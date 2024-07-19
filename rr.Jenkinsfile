@@ -2,6 +2,8 @@
 import au.id.kjtsanaktsidis.RubyRRCIShared
 import groovy.json.JsonSlurper
 
+def fullBuilderImage = ''
+
 pipeline {
   agent any
   triggers {
@@ -47,8 +49,9 @@ pipeline {
           )
           def imageJsonSlurp = new JsonSlurper().parseText(imageJson)
           def imageDigest = imageJsonSlurp[0].Digest
+          fullBuilderImage = "quay.io/kjtsanaktsidis/ruby-rr-ci@${imageDigest}"
 
-          setCustomBuildProperty(key: 'image_version', value: "quay.io/kjtsanaktsidis/ruby-rr-ci@sha256:${imageDigest}")
+          setCustomBuildProperty(key: 'image_version', value: "${fullBuilderImage}")
           setCustomBuildProperty(key: 'ruby_rr_ci_version', value: "${env.GIT_COMMIT}")
           setCustomBuildProperty(key: 'ruby_version', value: "${rubyVersion}")
           setCustomBuildProperty(key: 'rr', value: "true")
@@ -59,24 +62,32 @@ pipeline {
     }
     stage('Build ruby') {
       steps {
-        sh """
-          podman run --rm \
-            -v "\$(realpath .):/ruby-rr-ci:Z" \
-            --workdir /ruby-rr-ci/ruby \
-            quay.io/kjtsanaktsidis/ruby-rr-ci:${params.RUBY_RR_CI_IMAGE_TAG} \
-            ../build-ruby.rb --build
-        """
+        script {
+          docker.withTool('fake-docker') {
+            withCredentials([file(credentialsId: 'podman-auth.json', variable: 'REGISTRY_AUTH_FILE')]) {
+              docker.image(fullBuilderImage).inside {
+                dir('ruby') {
+                  sh '.../build-ruby.rb --build'
+                }
+              }
+            }
+          }
+        }
       }
     }
     stage('Run tests') {
       steps {
-        sh """
-          podman run --rm \
-            -v "\$(realpath .):/ruby-rr-ci:Z" \
-            --workdir /ruby-rr-ci/ruby \
-            quay.io/kjtsanaktsidis/ruby-rr-ci:${params.RUBY_RR_CI_IMAGE_TAG} \
-            ../build-ruby.rb --btest
-        """
+        script {
+          docker.withTool('fake-docker') {
+            withCredentials([file(credentialsId: 'podman-auth.json', variable: 'REGISTRY_AUTH_FILE')]) {
+              docker.image(fullBuilderImage).inside {
+                dir('ruby') {
+                  sh '.../build-ruby.rb --btest'
+                }
+              }
+            }
+          }
+        }
       }
     }
   }
