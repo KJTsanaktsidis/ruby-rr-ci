@@ -3,14 +3,12 @@ import au.id.kjtsanaktsidis.RubyRRCIShared
 import groovy.json.JsonSlurper
 
 fullImageName = ''
-def podmanRun(cmd, pcore = false) {
-    def cpusetFlags = ''
-    if (pcore) { cpuSetFlags = "--cpuset-cpus=0-7" }
+def podmanRun(cmd) {
     sh """
       podman run --rm \
         -v "\$(realpath .):/ruby-rr-ci:Z" \
         --workdir /ruby-rr-ci/ruby \
-        ${cpusetFlags} \
+        --security-opt seccomp=unconfined \
         ${fullImageName} \
         ${cmd}
     """
