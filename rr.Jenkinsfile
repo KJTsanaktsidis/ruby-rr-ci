@@ -81,4 +81,9 @@ pipeline {
       }
     }
   }
+  post {
+    always {
+      archiveArtifacts artifacts: 'ruby/build/test_output_dir/**/launchable.json'
+    }
+  }
 }
