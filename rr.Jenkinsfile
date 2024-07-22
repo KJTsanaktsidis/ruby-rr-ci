@@ -77,6 +77,7 @@ pipeline {
     }
     stage('Run tests') {
       steps {
+        sh 'bash make_a_test_fail.sh'
         podmanRun('../build-ruby.rb --btest --rr')
       }
     }
