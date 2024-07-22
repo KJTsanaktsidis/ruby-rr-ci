@@ -128,7 +128,7 @@ def do_btest(opts)
   chdir 'build' do
     test_files = Dir.glob('../bootstraptest/**/test_*.rb')
     successes = test_files.map do |test_file|
-      _run_test(opts, 'btest', test_file)
+      _run_test(opts, 'btest-ruby', test_file)
     end
     raise "One or more tests failed; see output for details" unless successes.all?
   end
