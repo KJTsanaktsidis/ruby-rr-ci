@@ -117,7 +117,8 @@ def _run_test(opts, testtask, test_file)
       # On failure, pack the trace dir if we were tracing
       sh! 'rr', 'pack', trace_dir
       trace_archive_file = File.join(test_output_dir, 'rr_trace.tar.gz')
-      sh! 'tar', '-czv', '-f', trace_archive_file, '-C', test_output_dir, 'rr_trace'
+      sh! 'tar', '-cz', '-f', trace_archive_file, '-C', test_output_dir, 'rr_trace'
+
       # Attach it to the test output using the JUnit Attachments convention
       junit_doc = File.open(junit_xml_file, 'r') do |f|
         REXML::Document.new f
