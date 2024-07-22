@@ -1,12 +1,12 @@
-From 98e862e7fe48bc5c23c03ef551822a0c3247a57b Mon Sep 17 00:00:00 2001
+From 402dc5d311122f59672434c1068134ebc47a8513 Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
 Subject: [PATCH] Implement JUnit XML test reporting
 
 ---
  bootstraptest/runner.rb      |  26 ++++-
- tool/lib/junit_xml_output.rb | 191 +++++++++++++++++++++++++++++++++++
- 2 files changed, 215 insertions(+), 2 deletions(-)
+ tool/lib/junit_xml_output.rb | 190 +++++++++++++++++++++++++++++++++++
+ 2 files changed, 214 insertions(+), 2 deletions(-)
  create mode 100644 tool/lib/junit_xml_output.rb
 
 diff --git a/bootstraptest/runner.rb b/bootstraptest/runner.rb
@@ -92,10 +92,10 @@ index 24324fa51f..aa45c7432c 100755
  
 diff --git a/tool/lib/junit_xml_output.rb b/tool/lib/junit_xml_output.rb
 new file mode 100644
-index 0000000000..107cd337ad
+index 0000000000..d0794c16e5
 --- /dev/null
 +++ b/tool/lib/junit_xml_output.rb
-@@ -0,0 +1,191 @@
+@@ -0,0 +1,190 @@
 +require 'rubygems'
 +gem 'rexml'
 +require 'rexml'
@@ -160,7 +160,7 @@ index 0000000000..107cd337ad
 +  end
 +
 +  class TestCase
-+    attr_accessor :name, :started_at, :finished_at, :file, :line, :classname
++    attr_accessor :name, :started_at, :finished_at, :file, :line
 +    attr_accessor :output_capture
 +
 +    def to_xml_element
@@ -169,7 +169,6 @@ index 0000000000..107cd337ad
 +        el.add_attribute 'time', @finished_at - @started_at if @started_at && @finished_at
 +        el.add_attribute 'file', @file if @file
 +        el.add_attribute 'line', @line if @line
-+        el.add_attribute 'classname', @classname if @classname
 +
 +        if @output_capture
 +          out_el = REXML::Element.new('system-out')
@@ -240,7 +239,8 @@ index 0000000000..107cd337ad
 +
 +    def started_testsuite!(name)
 +      @current_testsuite = TestSuite.new.tap do |ts|
-+        ts.name = name.gsub(/\.rb$/, '')
++        # Java-ize the test name for Jenkins' benefit
++        ts.name = "#{@test_suite_group.name}.#{name.gsub(/\//, '.').gsub(/\.rb$/, '')}"
 +        ts.started_at = Time.now
 +        ts.output_capture = OutputCapturer.new
 +        ts.output_capture.start!
@@ -261,7 +261,6 @@ index 0000000000..107cd337ad
 +        tc.name = name
 +        tc.file = file
 +        tc.line = line
-+        # tc.classname = @current_testsuite.name
 +        tc.started_at = Time.now
 +        tc.output_capture = OutputCapturer.new
 +        tc.output_capture.start!

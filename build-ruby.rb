@@ -6,6 +6,7 @@ require 'tmpdir'
 require 'shellwords'
 require 'open3'
 require 'pathname'
+require 'rexml'
 
 CONFIGURE_FLAGS = %w[--disable-install-doc --enable-yjit]
 OPTFLAGS=%w[-O3]
@@ -44,7 +45,7 @@ def do_build(opts)
   end
 
   puts "=> Applying patches"
-  sh! 'patch', '-Np1', '-i', '../junit_test_report.patch'
+  sh! 'patch', '-Np1', '-i', File.join(__dir__, 'junit_test_report.patch')
 
   puts "=> Building Ruby"
   sh! "./autogen.sh"
@@ -85,13 +86,14 @@ def _run_test(opts, testtask, test_file)
   full_test_name = relative_test_file.gsub('/', '__').gsub(/\.rb$/, '')
   # test_output_dir will be test_results/$full_test_name
   test_output_dir = File.join('test_output_dir', full_test_name)
+  junit_xml_file = File.join(test_output_dir, 'junit.xml')
 
   rm_rf test_output_dir
   mkdir_p test_output_dir
 
   testopts = [
     '-v','--tty=no',
-    "--junit-filename=#{File.join(test_output_dir, 'junit.xml')}",
+    "--junit-filename=#{junit_xml_file}",
     test_file
   ]
   test_cmdline = [
@@ -111,9 +113,26 @@ def _run_test(opts, testtask, test_file)
   rescue => e
     puts "=> Test #{test_file} FAIL: #{e}"
     result = false
-    # On failure, pack the trace dir if we were tracing
-    sh! 'rr', 'pack', trace_dir if opts[:rr]
-    sh! 'tar', '-czv', '-f', File.join(test_output_dir, 'rr_trace.tar.gz'), '-C', test_output_dir, 'rr_trace'
+    if opts[:rr]
+      # On failure, pack the trace dir if we were tracing
+      sh! 'rr', 'pack', trace_dir
+      trace_archive_file = File.join(test_output_dir, 'rr_trace.tar.gz')
+      sh! 'tar', '-czv', '-f', trace_archive_file, '-C', test_output_dir, 'rr_trace'
+      # Attach it to the test output using the JUnit Attachments convention
+      junit_doc = File.open(junit_xml_file, 'r') do |f|
+        REXML::Document.new f
+      end
+      junit_testcase = REXML::XPath.first(junit_doc, '*/testsuite')
+      output_el = REXML::XPath.first(junit_testcase, '/system-err')
+      if output_el.nil?
+        output_el = REXML::Element.new('system-err')
+        junit_testcase.add_element output_el
+      end
+      output_el.add_text "\n\n--- RR TRACE ---\n[[ATTACHMENT|#{File.absolute_path trace_archive_file}]]\n"
+      File.open(junit_xml_file, 'w') do |f|
+        junit_doc.write(output: f)
+      end
+    end
   else
     puts "=> Test #{test_file} PASS"
   end
