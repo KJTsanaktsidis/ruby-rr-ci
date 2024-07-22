@@ -7,6 +7,7 @@ def podmanRun(cmd) {
     sh """
       podman run --rm \
         -v "\$(realpath .):/ruby-rr-ci:Z" \
+        -e "RUBY_CHECKOUT_ABSOLUTE_PATH=\$(realpath ruby)" \
         --workdir /ruby-rr-ci/ruby \
         --security-opt seccomp=unconfined \
         ${fullImageName} \

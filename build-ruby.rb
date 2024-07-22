@@ -128,7 +128,14 @@ def _run_test(opts, testtask, test_file)
         output_el = REXML::Element.new('system-err')
         junit_testcase.add_element output_el
       end
-      output_el.add_text "\n\n--- RR TRACE ---\n[[ATTACHMENT|#{File.absolute_path trace_archive_file}]]\n"
+      # The Jenkins JUnit attachment plugin wants this as an absolute path, but of course
+      # we run this script in a container...
+      absolute_trace_archive_file = if ENV.key?('RUBY_CHECKOUT_ABSOLUTE_PATH')
+        File.join(ENV['RUBY_CHECKOUT_ABSOLUTE_PATH'], 'build', trace_archive_file)
+      else
+        File.absolute_path trace_archive_file
+      end
+      output_el.add_text "\n\n--- RR TRACE ---\n[[ATTACHMENT|#{absolute_trace_archive_file}]]\n"
       File.open(junit_xml_file, 'w') do |f|
         junit_doc.write(output: f)
       end
