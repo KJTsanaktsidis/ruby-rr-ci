@@ -1,0 +1,290 @@
+From 8ec2a8a35567006548b653e5f3b6ce0a62b7e09a Mon Sep 17 00:00:00 2001
+From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
+Date: Mon, 22 Jul 2024 12:20:30 +1000
+Subject: [PATCH] Implement JUnit XML test reporting
+
+---
+ bootstraptest/runner.rb      |  26 ++++-
+ tool/lib/junit_xml_output.rb | 189 +++++++++++++++++++++++++++++++++++
+ 2 files changed, 213 insertions(+), 2 deletions(-)
+ create mode 100644 tool/lib/junit_xml_output.rb
+
+diff --git a/bootstraptest/runner.rb b/bootstraptest/runner.rb
+index 24324fa51f..aa45c7432c 100755
+--- a/bootstraptest/runner.rb
++++ b/bootstraptest/runner.rb
+@@ -78,7 +78,8 @@ def Dir.mktmpdir(prefix_suffix=nil, tmpdir=nil)
+                 :platform,
+                 :timeout,
+                 :timeout_scale,
+-                :launchable_test_reports
++                :launchable_test_reports,
++                :junit_xml_writer
+                 )
+ BT = Class.new(bt) do
+   def indent=(n)
+@@ -225,6 +226,7 @@ def main
+     -s, --stress                    stress test.
+     -v, --verbose                   Output test name before exec.
+     -q, --quiet                     Don\'t print header message.
++        --junit-filename=OUT        Emit a JUnit-style XML test report to OUT
+     -h, --help                      Print this message and quit.
+ End
+       exit true
+@@ -243,6 +245,16 @@ def main
+         writer.close
+       }
+       true
++    when /\A--junit-filename=(.*)\z/
++      junit_filename = $1
++      require_relative '../tool/lib/junit_xml_output'
++      BT.junit_xml_writer = JUnitXMLOutput::Writer.new 'btest'
++      BT.junit_xml_writer.started!
++      at_exit do
++        BT.junit_xml_writer.finished!
++        BT.junit_xml_writer.write_to_file junit_filename
++      end
++      true
+     else
+       false
+     end
+@@ -257,7 +269,7 @@ def main
+   BT.progress = %w[- \\ | /]
+   BT.progress_bs = "\b" * BT.progress[0].size
+   BT.tty = $stderr.tty? if BT.tty.nil?
+-  BT.wn ||= /-j(\d+)?/ =~ (ENV["MAKEFLAGS"] || ENV["MFLAGS"]) ? $1.to_i : 1
++  BT.wn ||= /(?:\A|\s)-j(\d+)?/ =~ (ENV["MAKEFLAGS"] || ENV["MFLAGS"]) ? $1.to_i : 1
+ 
+   case BT.color
+   when nil
+@@ -426,6 +438,7 @@ def exec_test(paths)
+   else
+     prev_basename = nil
+     Assertion.all.each do |basename, assertions|
++      BT.junit_xml_writer&.started_testsuite! basename
+       if !BT.quiet && basename != prev_basename
+         prev_basename = basename
+         $stderr.printf("%s%-*s ", erase(BT.quiet), BT.width, basename)
+@@ -437,8 +450,15 @@ def exec_test(paths)
+       error = BT_STATE.error
+ 
+       assertions.each do |assertion|
++        old_error = BT_STATE.error
++        BT.junit_xml_writer&.started_testcase!(
++          "##{assertion.id}: #{assertion.path}:#{assertion.lineno}", assertion.path, assertion.lineno
++        )
++
+         BT_STATE.count += 1
+         assertion.call
++
++        BT.junit_xml_writer&.finished_testcase!(BT_STATE.error > old_error)
+       end
+ 
+       if BT.tty
+@@ -453,6 +473,8 @@ def exec_test(paths)
+         end
+       end
+       $stderr.puts if !BT.quiet and (BT.tty or BT_STATE.error == error)
++    ensure
++      BT.junit_xml_writer&.finished_testsuite!
+     end
+   end
+ 
+diff --git a/tool/lib/junit_xml_output.rb b/tool/lib/junit_xml_output.rb
+new file mode 100644
+index 0000000000..d6396d0417
+--- /dev/null
++++ b/tool/lib/junit_xml_output.rb
+@@ -0,0 +1,189 @@
++require 'rubygems'
++gem 'rexml'
++require 'rexml'
++require 'time'
++
++module JUnitXMLOutput
++  class TestSuiteGroup
++    attr_accessor :name, :test_count, :failure_count, :started_at, :finished_at
++    attr_accessor :testsuites
++
++    def initialize
++      @testsuites = []
++      @test_count = 0
++      @failure_count = 0
++    end
++
++    def to_xml_element
++      REXML::Element.new('testsuites').tap do |el|
++        el.add_attribute 'name', @name if @name
++        el.add_attribute 'tests', @test_count if @test_count
++        el.add_attribute 'failures', @failure_count if @failure_count
++        el.add_attribute 'timestamp', @started_at.iso8601 if @started_at
++        el.add_attribute 'time', @finished_at - @started_at if @started_at && @finished_at
++
++        testsuites.each do |suite|
++          el.add_element suite.to_xml_element
++        end
++      end
++    end
++  end
++
++  class TestSuite
++    attr_accessor :name, :test_count, :failure_count, :started_at, :finished_at
++    attr_accessor :file, :output_capture, :testcases
++
++    def initialize
++      @testcases = []
++      @test_count = 0
++      @failure_count = 0
++    end
++
++    def to_xml_element
++      REXML::Element.new('testsuite').tap do |el|
++        el.add_attribute 'name', @name if @name
++        el.add_attribute 'tests', @test_count if @test_count
++        el.add_attribute 'failures', @failure_count if @failure_count
++        el.add_attribute 'timestamp', @started_at.iso8601 if @started_at
++        el.add_attribute 'time', @finished_at - @started_at if @started_at && @finished_at
++        el.add_attribute 'file', @file if @file
++
++        testcases.each do |tcase|
++          el.add_element tcase.to_xml_element
++        end
++
++        if @output_capture
++          out_el = REXML::Element.new('system-out')
++          out_el.add_text REXML::Text.new(@output_capture.captured, true)
++          el.add_element out_el
++        end
++      end
++    end
++  end
++
++  class TestCase
++    attr_accessor :name, :started_at, :finished_at, :file, :line
++    attr_accessor :output_capture
++
++    def to_xml_element
++      REXML::Element.new('testcase').tap do |el|
++        el.add_attribute 'name', @name if @name
++        el.add_attribute 'time', @finished_at - @started_at if @started_at && @finished_at
++        el.add_attribute 'file', @file if @file
++        el.add_attribute 'line', @line if @line
++
++        if @output_capture
++          out_el = REXML::Element.new('system-out')
++          out_el.add_text REXML::Text.new(@output_capture.captured, true)
++          el.add_element out_el
++        end
++      end
++    end
++  end
++
++  class OutputCapturer
++    attr_reader :captured
++
++    def start!
++      @old_stdout = $stdout.dup
++      @old_stderr = $stderr.dup
++      @pipe_r, @pipe_w = IO.pipe
++      $stdout.reopen @pipe_w
++      $stderr.reopen @pipe_w
++      @captured = +""
++      @tee_thread = Thread.new(&method(:run_tee))
++    end
++
++    def finish!
++      $stdout.reopen @old_stdout
++      $stderr.reopen @old_stderr
++      @pipe_w.close
++      @tee_thread.join
++      @pipe_r.close
++      @old_stdout.close
++      @old_stderr.close
++    end
++
++    private
++
++    def run_tee
++      loop do
++        data = @pipe_r.readpartial(4096)
++        @captured << data
++        @old_stdout.write data
++      rescue EOFError
++        return
++      end
++    end
++  end
++
++  class Writer
++    def initialize(test_run_name)
++      @test_suite_group = TestSuiteGroup.new.tap do |g|
++        g.name = test_run_name
++      end
++    end
++
++    def to_xml_document
++      REXML::Document.new.tap do |doc|
++        doc.add REXML::XMLDecl.new('1.0', 'UTF-8')
++        doc.add @test_suite_group.to_xml_element
++      end
++    end
++
++    def started!
++      @test_suite_group.started_at = Time.now
++    end
++
++    def finished!
++      @test_suite_group.finished_at = Time.now
++    end
++
++    def started_testsuite!(name)
++      @current_testsuite = TestSuite.new.tap do |ts|
++        ts.name = name
++        ts.started_at = Time.now
++        ts.output_capture = OutputCapturer.new
++        ts.output_capture.start!
++      end
++      @test_suite_group.testsuites << @current_testsuite
++    end
++
++    def finished_testsuite!
++      @current_testsuite.finished_at = Time.now
++      @current_testsuite.output_capture.finish!
++      @test_suite_group.test_count += @current_testsuite.test_count
++      @test_suite_group.failure_count += @current_testsuite.failure_count
++      @current_testsuite = nil
++    end
++
++    def started_testcase!(name, file, line)
++      @current_testcase = TestCase.new.tap do |tc|
++        tc.name = name
++        tc.file = file
++        tc.line = line
++        tc.started_at = Time.now
++        tc.output_capture = OutputCapturer.new
++        tc.output_capture.start!
++      end
++      @current_testsuite.testcases << @current_testcase
++    end
++
++    def finished_testcase!(success)
++      @current_testcase.finished_at = Time.now
++      @current_testcase.output_capture.finish!
++      @current_testsuite.test_count += 1
++      @current_testsuite.failure_count += 1 unless success
++      @current_testcase = nil
++    end
++
++    def write_to_file(filename)
++      File.open(filename, 'w') do |f|
++        # REXML pretty-printing with indent is broken and will eat all the whitespace
++        # in <standard-out> elements
++        to_xml_document.write(output: f)
++        f.write "\n"
++      end
++    end
++  end
++end
+-- 
+2.45.2
+

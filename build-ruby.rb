@@ -37,11 +37,16 @@ def sh_capture!(*args, **kwargs)
 end
 
 def do_build(opts)
-  puts "=> Building Ruby"
+  puts "=> Cleaning source tree"
   if File.exist?('.git')
     sh! 'git', 'reset', '--hard'
     sh! 'git', 'clean', '-fxd'
   end
+
+  puts "=> Applying patches"
+  sh! 'patch', '-Np1', '-i', '../junit_test_report.patch'
+
+  puts "=> Building Ruby"
   sh! "./autogen.sh"
   rm_rf 'build'
   mkdir 'build'
@@ -63,6 +68,9 @@ def do_build(opts)
       "cppflags=#{cppflags.join(' ')}",
       "LDFLAGS=#{ldflags.join(' ')}"
     sh! 'make', '-j'
+
+    puts "=> Extracting bundled gems"
+    sh! 'make', 'extract-gems'
   end
 end
 
@@ -83,7 +91,7 @@ def _run_test(opts, testtask, test_file)
 
   testopts = [
     '-v','--tty=no',
-    "--launchable-test-reports=#{File.join(test_output_dir, 'launchable.json')}",
+    "--junit-filename=#{File.join(test_output_dir, 'junit.xml')}",
     test_file
   ]
   test_cmdline = [
