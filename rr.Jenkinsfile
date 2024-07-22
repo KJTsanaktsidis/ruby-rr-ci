@@ -84,7 +84,12 @@ pipeline {
   }
   post {
     always {
-      junit 'ruby/build/test_output_dir/**/junit.xml'
+      junit(
+       testResults: 'ruby/build/test_output_dir/**/junit.xml',
+       testDataPublishers: [[$class:'AttachmentPublisher']],
+       keepLongStdio: true,
+       allowEmptyResults: true
+      )
     }
   }
 }
