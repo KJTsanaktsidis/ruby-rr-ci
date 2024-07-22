@@ -1,16 +1,16 @@
-From 402dc5d311122f59672434c1068134ebc47a8513 Mon Sep 17 00:00:00 2001
+From 6cc16fc570cbac7d7028700b448f541475f06827 Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
 Subject: [PATCH] Implement JUnit XML test reporting
 
 ---
  bootstraptest/runner.rb      |  26 ++++-
- tool/lib/junit_xml_output.rb | 190 +++++++++++++++++++++++++++++++++++
- 2 files changed, 214 insertions(+), 2 deletions(-)
+ tool/lib/junit_xml_output.rb | 195 +++++++++++++++++++++++++++++++++++
+ 2 files changed, 219 insertions(+), 2 deletions(-)
  create mode 100644 tool/lib/junit_xml_output.rb
 
 diff --git a/bootstraptest/runner.rb b/bootstraptest/runner.rb
-index 24324fa51f..aa45c7432c 100755
+index 24324fa51f..8febd9dc76 100755
 --- a/bootstraptest/runner.rb
 +++ b/bootstraptest/runner.rb
 @@ -78,7 +78,8 @@ def Dir.mktmpdir(prefix_suffix=nil, tmpdir=nil)
@@ -77,7 +77,7 @@ index 24324fa51f..aa45c7432c 100755
          BT_STATE.count += 1
          assertion.call
 +
-+        BT.junit_xml_writer&.finished_testcase!(BT_STATE.error > old_error)
++        BT.junit_xml_writer&.finished_testcase!(BT_STATE.error == old_error)
        end
  
        if BT.tty
@@ -92,10 +92,10 @@ index 24324fa51f..aa45c7432c 100755
  
 diff --git a/tool/lib/junit_xml_output.rb b/tool/lib/junit_xml_output.rb
 new file mode 100644
-index 0000000000..d0794c16e5
+index 0000000000..53fe7e53a1
 --- /dev/null
 +++ b/tool/lib/junit_xml_output.rb
-@@ -0,0 +1,190 @@
+@@ -0,0 +1,195 @@
 +require 'rubygems'
 +gem 'rexml'
 +require 'rexml'
@@ -160,7 +160,7 @@ index 0000000000..d0794c16e5
 +  end
 +
 +  class TestCase
-+    attr_accessor :name, :started_at, :finished_at, :file, :line
++    attr_accessor :name, :started_at, :finished_at, :file, :line, :did_pass
 +    attr_accessor :output_capture
 +
 +    def to_xml_element
@@ -169,6 +169,10 @@ index 0000000000..d0794c16e5
 +        el.add_attribute 'time', @finished_at - @started_at if @started_at && @finished_at
 +        el.add_attribute 'file', @file if @file
 +        el.add_attribute 'line', @line if @line
++
++        unless @did_pass
++          el.add_element(REXML::Element.new('failure'))
++        end
 +
 +        if @output_capture
 +          out_el = REXML::Element.new('system-out')
@@ -268,11 +272,12 @@ index 0000000000..d0794c16e5
 +      @current_testsuite.testcases << @current_testcase
 +    end
 +
-+    def finished_testcase!(success)
++    def finished_testcase!(did_pass)
 +      @current_testcase.finished_at = Time.now
++      @current_testcase.did_pass = did_pass
 +      @current_testcase.output_capture.finish!
 +      @current_testsuite.test_count += 1
-+      @current_testsuite.failure_count += 1 unless success
++      @current_testsuite.failure_count += 1 unless did_pass
 +      @current_testcase = nil
 +    end
 +
