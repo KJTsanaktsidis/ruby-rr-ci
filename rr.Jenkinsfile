@@ -91,8 +91,6 @@ pipeline {
        keepLongStdio: true,
        allowEmptyResults: true
       )
-    }
-    always {
       podmanRun('../build-ruby.rb --build-results')
       publishHTML(target: [
         reportName: 'Build results (HTML)',
