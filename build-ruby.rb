@@ -130,7 +130,7 @@ def _run_test(opts, testtask, test_file)
       testcase_stderr = REXML::XPath.first(junit_testcase, '/system-err')
       if testcase_stderr.nil?
         testcase_stderr = REXML::Element.new('system-err')
-        junit_testcase.add_element output_el
+        junit_testcase.add_element testcase_stderr
       end
       output_els << testcase_stderr
 
@@ -151,7 +151,9 @@ def _run_test(opts, testtask, test_file)
       else
         File.absolute_path trace_archive_file
       end
-      output_el.add_text "\n\n--- RR TRACE ---\n[[ATTACHMENT|#{absolute_trace_archive_file}]]\n"
+      output_els.each do |el|
+        el.add_text "\n\n--- RR TRACE ---\n[[ATTACHMENT|#{absolute_trace_archive_file}]]\n"
+      end
       File.open(junit_xml_file, 'w') do |f|
         junit_doc.write(output: f)
       end
