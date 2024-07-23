@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+  <head></head>
+  <body>
+    <table>
+      <thead>
+        <tr>
+          <th>Suite</th>
+          <th>Test</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% failed_tests.each do |test| %>
+          <tr>
+            <td><%= test[:suite] %></td>
+            <td><%= test[:file] %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+    <a href='/'>Where does this link go?</a>
+  </body>
+</html>

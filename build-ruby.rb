@@ -7,6 +7,7 @@ require 'shellwords'
 require 'open3'
 require 'pathname'
 require 'rexml'
+require 'erb'
 
 CONFIGURE_FLAGS = %w[--disable-install-doc --enable-yjit]
 OPTFLAGS=%w[-O3]
@@ -161,6 +162,37 @@ def do_btest(opts)
   end
 end
 
+def do_publish_build_results(opts)
+  puts "=> Producing build results"
+  chdir 'build' do
+    failed_tests = []
+    Dir.glob('test_output_dir/**/junit.xml') do |junit_file|
+      junit_doc = File.open(junit_file, 'r') do |f|
+        REXML::Document.new f
+      end
+      REXML::XPath.each(junit_doc, '*/testsuites').each do |suite_group_el|
+        REXML::XPath.each(suite_group_el, '*/testsuite').each do |testsuite_el|
+          did_fail = !!REXML::XPath.first(testsuite_el, '*/failure | */error')
+          next unless did_fail
+
+          failed_tests << {
+            suite: suite_group_el.attribute('name'),
+            file: testsuite_el.attribute('file'),
+          }
+        end
+      end
+    end
+
+    template = File.open(File.join(__dir__, 'build_results.html.erb'), 'r') do |f|
+      ERB.new(f.read)
+    end
+    mkdir_p 'build_results'
+    File.open('build_results/index.html', 'w') do |f|
+      f.write template.result_with_hash(failed_tests:)
+    end
+  end
+end
+
 def check_working_perf_counters!
   puts "=> Checking which CPUs have working perf counters"
   cpu_csv = sh_capture!('lscpu', '--all', '--parse')
@@ -196,6 +228,10 @@ OptionParser.new do |opts|
 
   opts.on('--btest', 'Run bootstrap tests') do
     options[:steps] << method(:do_btest)
+  end
+
+  opts.on('--build-results', 'Render build results') do
+    options[:steps] << method(:do_publish_build_results)
   end
 
   opts.on('--asan', 'Enable ASAN') do

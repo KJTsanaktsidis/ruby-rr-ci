@@ -91,5 +91,15 @@ pipeline {
        allowEmptyResults: true
       )
     }
+    always {
+      podmanRun('../build-ruby.rb --build-results')
+      publishHTML(target: [
+        reportName: 'Build results (HTML)',
+        keepAll: true,
+        alwaysLinkToLastBuild: true,
+        reportDir: 'ruby/build/build_report',
+        reportFiles: 'index.html',
+      ])
+    }
   }
 }
