@@ -198,11 +198,11 @@ def do_publish_build_results(opts)
       end
     end
 
-    template = File.open(File.join(__dir__, 'build_results.html.erb'), 'r') do |f|
+    template = File.open(File.join(__dir__, 'build_report.html.erb'), 'r') do |f|
       ERB.new(f.read)
     end
-    mkdir_p 'build_results'
-    File.open('build_results/index.html', 'w') do |f|
+    mkdir_p 'build_report'
+    File.open('build_report/index.html', 'w') do |f|
       f.write template.result_with_hash(failed_tests:)
     end
   end
