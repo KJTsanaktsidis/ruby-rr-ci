@@ -124,17 +124,15 @@ def _run_test(opts, testtask, test_file)
       junit_doc = File.open(junit_xml_file, 'r') do |f|
         REXML::Document.new f
       end
-      junit_testcase = REXML::XPath.first(junit_doc, '*/testsuite')
       output_els = []
 
-      testcase_stderr = REXML::XPath.first(junit_testcase, '/system-err')
-      if testcase_stderr.nil?
-        testcase_stderr = REXML::Element.new('system-err')
-        junit_testcase.add_element testcase_stderr
-      end
-      output_els << testcase_stderr
-
-      REXML::XPath.each('*/testcase[descendant::error] | */testcase[descendant::failure') do |tc_el|
+      fail_xpath = [
+        '*/testsuite[descendant::error]',
+        '*/testsuite[descendant::failure]',
+        '*/testcase[descendant::error]',
+        '*/testcase[descendant::failure]',
+      ].join(' | ')
+      REXML::XPath.each(junit_doc, fail_xpath) do |tc_el|
         tc_el_stderr = REXML::XPath.first(tc_el, '/system-err')
         if tc_el_stderr.nil?
           tc_el_stderr = REXML::Element.new('system-err')
