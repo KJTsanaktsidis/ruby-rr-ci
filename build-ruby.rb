@@ -127,8 +127,8 @@ def _run_test(opts, testtask, test_file)
       output_els = []
 
       fail_xpath = [
-        '*/testsuite[descendant::error]',
-        '*/testsuite[descendant::failure]',
+        # '*/testsuite[descendant::error]',
+        # '*/testsuite[descendant::failure]',
         '*/testcase[descendant::error]',
         '*/testcase[descendant::failure]',
       ].join(' | ')
