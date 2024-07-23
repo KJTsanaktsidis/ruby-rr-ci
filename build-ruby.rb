@@ -127,10 +127,10 @@ def _run_test(opts, testtask, test_file)
       output_els = []
 
       fail_xpath = [
-        # '*/testsuite[descendant::error]',
-        # '*/testsuite[descendant::failure]',
-        '*/testcase[descendant::error]',
-        '*/testcase[descendant::failure]',
+        '//*/testsuite[descendant::error]',
+        '//*/testsuite[descendant::failure]',
+        '//*/testcase[descendant::error]',
+        '//*/testcase[descendant::failure]',
       ].join(' | ')
       REXML::XPath.each(junit_doc, fail_xpath) do |tc_el|
         tc_el_stderr = REXML::XPath.first(tc_el, '/system-err')
@@ -185,8 +185,8 @@ def do_publish_build_results(opts)
       junit_doc = File.open(junit_file, 'r') do |f|
         REXML::Document.new f
       end
-      REXML::XPath.each(junit_doc, '*/testsuites').each do |suite_group_el|
-        REXML::XPath.each(suite_group_el, '*/testsuite').each do |testsuite_el|
+      REXML::XPath.each(junit_doc, '//*/testsuites').each do |suite_group_el|
+        REXML::XPath.each(suite_group_el, '//*/testsuite').each do |testsuite_el|
           did_fail = !!REXML::XPath.first(testsuite_el, '*/failure | */error')
           next unless did_fail
 
