@@ -125,11 +125,25 @@ def _run_test(opts, testtask, test_file)
         REXML::Document.new f
       end
       junit_testcase = REXML::XPath.first(junit_doc, '*/testsuite')
-      output_el = REXML::XPath.first(junit_testcase, '/system-err')
-      if output_el.nil?
-        output_el = REXML::Element.new('system-err')
+      output_els = []
+
+      testcase_stderr = REXML::XPath.first(junit_testcase, '/system-err')
+      if testcase_stderr.nil?
+        testcase_stderr = REXML::Element.new('system-err')
         junit_testcase.add_element output_el
       end
+      output_els << testcase_stderr
+
+      REXML::XPath.each('*/testcase[descendant::error] | */testcase[descendant::failure') do |tc_el|
+        tc_el_stderr = REXML::XPath.first(tc_el, '/system-err')
+        if tc_el_stderr.nil?
+          tc_el_stderr = REXML::Element.new('system-err')
+          tc_el.add_element tc_el_stderr
+        end
+        output_els << tc_el_stderr
+      end
+
+
       # The Jenkins JUnit attachment plugin wants this as an absolute path, but of course
       # we run this script in a container...
       absolute_trace_archive_file = if ENV.key?('RUBY_CHECKOUT_ABSOLUTE_PATH')
