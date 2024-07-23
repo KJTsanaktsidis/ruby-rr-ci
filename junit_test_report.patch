@@ -1,16 +1,16 @@
-From 6cc16fc570cbac7d7028700b448f541475f06827 Mon Sep 17 00:00:00 2001
+From f13e613fcda8afe1f01b374d09a380009c506829 Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
 Subject: [PATCH] Implement JUnit XML test reporting
 
 ---
- bootstraptest/runner.rb      |  26 ++++-
+ bootstraptest/runner.rb      |  30 +++++-
  tool/lib/junit_xml_output.rb | 195 +++++++++++++++++++++++++++++++++++
- 2 files changed, 219 insertions(+), 2 deletions(-)
+ 2 files changed, 221 insertions(+), 4 deletions(-)
  create mode 100644 tool/lib/junit_xml_output.rb
 
 diff --git a/bootstraptest/runner.rb b/bootstraptest/runner.rb
-index 24324fa51f..8febd9dc76 100755
+index 24324fa51f..687d591e63 100755
 --- a/bootstraptest/runner.rb
 +++ b/bootstraptest/runner.rb
 @@ -78,7 +78,8 @@ def Dir.mktmpdir(prefix_suffix=nil, tmpdir=nil)
@@ -71,7 +71,7 @@ index 24324fa51f..8febd9dc76 100755
        assertions.each do |assertion|
 +        old_error = BT_STATE.error
 +        BT.junit_xml_writer&.started_testcase!(
-+          "##{assertion.id}: #{assertion.path}:#{assertion.lineno}", assertion.path, assertion.lineno
++          "##{assertion.id}: #{assertion.fullpath}:#{assertion.lineno}", assertion.fullpath, assertion.lineno
 +        )
 +
          BT_STATE.count += 1
@@ -90,6 +90,24 @@ index 24324fa51f..8febd9dc76 100755
      end
    end
  
+@@ -487,7 +509,7 @@ def target_platform
+   BT.platform or RUBY_PLATFORM
+ end
+ 
+-class Assertion < Struct.new(:src, :path, :lineno, :proc)
++class Assertion < Struct.new(:src, :path, :lineno, :proc, :fullpath)
+   prepend Launchable
+   @count = 0
+   @all = Hash.new{|h, k| h[k] = []}
+@@ -657,7 +679,7 @@ def add_assertion src, pr
+   lineno = loc.lineno
+   path = File.basename(loc.path)
+ 
+-  Assertion.new(src, path, lineno, pr)
++  Assertion.new(src, path, lineno, pr, loc.path)
+ end
+ 
+ def assert_equal(expected, testsrc, message = '', opt = '', **kwargs)
 diff --git a/tool/lib/junit_xml_output.rb b/tool/lib/junit_xml_output.rb
 new file mode 100644
 index 0000000000..53fe7e53a1
