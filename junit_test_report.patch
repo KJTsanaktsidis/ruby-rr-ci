@@ -1,19 +1,27 @@
-From f13e613fcda8afe1f01b374d09a380009c506829 Mon Sep 17 00:00:00 2001
+From 4c47252d5de05cf1b4cf66d09d62684eb0c993c5 Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
 Subject: [PATCH] Implement JUnit XML test reporting
 
 ---
- bootstraptest/runner.rb      |  30 +++++-
+ bootstraptest/runner.rb      |  35 ++++++-
  tool/lib/junit_xml_output.rb | 195 +++++++++++++++++++++++++++++++++++
- 2 files changed, 221 insertions(+), 4 deletions(-)
+ 2 files changed, 226 insertions(+), 4 deletions(-)
  create mode 100644 tool/lib/junit_xml_output.rb
 
 diff --git a/bootstraptest/runner.rb b/bootstraptest/runner.rb
-index 24324fa51f..687d591e63 100755
+index 24324fa51f..2dd26d11a6 100755
 --- a/bootstraptest/runner.rb
 +++ b/bootstraptest/runner.rb
-@@ -78,7 +78,8 @@ def Dir.mktmpdir(prefix_suffix=nil, tmpdir=nil)
+@@ -12,6 +12,7 @@
+ begin
+   require 'fileutils'
+   require 'tmpdir'
++  require 'pathname'
+ rescue LoadError
+   $:.unshift File.join(File.dirname(__FILE__), '../lib')
+   retry
+@@ -78,7 +79,8 @@ def Dir.mktmpdir(prefix_suffix=nil, tmpdir=nil)
                  :platform,
                  :timeout,
                  :timeout_scale,
@@ -23,7 +31,7 @@ index 24324fa51f..687d591e63 100755
                  )
  BT = Class.new(bt) do
    def indent=(n)
-@@ -225,6 +226,7 @@ def main
+@@ -225,6 +227,7 @@ def main
      -s, --stress                    stress test.
      -v, --verbose                   Output test name before exec.
      -q, --quiet                     Don\'t print header message.
@@ -31,7 +39,7 @@ index 24324fa51f..687d591e63 100755
      -h, --help                      Print this message and quit.
  End
        exit true
-@@ -243,6 +245,16 @@ def main
+@@ -243,6 +246,16 @@ def main
          writer.close
        }
        true
@@ -48,7 +56,7 @@ index 24324fa51f..687d591e63 100755
      else
        false
      end
-@@ -257,7 +269,7 @@ def main
+@@ -257,7 +270,7 @@ def main
    BT.progress = %w[- \\ | /]
    BT.progress_bs = "\b" * BT.progress[0].size
    BT.tty = $stderr.tty? if BT.tty.nil?
@@ -57,7 +65,7 @@ index 24324fa51f..687d591e63 100755
  
    case BT.color
    when nil
-@@ -426,6 +438,7 @@ def exec_test(paths)
+@@ -426,6 +439,7 @@ def exec_test(paths)
    else
      prev_basename = nil
      Assertion.all.each do |basename, assertions|
@@ -65,13 +73,13 @@ index 24324fa51f..687d591e63 100755
        if !BT.quiet && basename != prev_basename
          prev_basename = basename
          $stderr.printf("%s%-*s ", erase(BT.quiet), BT.width, basename)
-@@ -437,8 +450,15 @@ def exec_test(paths)
+@@ -437,8 +451,15 @@ def exec_test(paths)
        error = BT_STATE.error
  
        assertions.each do |assertion|
 +        old_error = BT_STATE.error
 +        BT.junit_xml_writer&.started_testcase!(
-+          "##{assertion.id}: #{assertion.fullpath}:#{assertion.lineno}", assertion.fullpath, assertion.lineno
++          "##{assertion.id}: #{assertion.relative_path}:#{assertion.lineno}", assertion.relative_path, assertion.lineno
 +        )
 +
          BT_STATE.count += 1
@@ -81,7 +89,7 @@ index 24324fa51f..687d591e63 100755
        end
  
        if BT.tty
-@@ -453,6 +473,8 @@ def exec_test(paths)
+@@ -453,6 +474,8 @@ def exec_test(paths)
          end
        end
        $stderr.puts if !BT.quiet and (BT.tty or BT_STATE.error == error)
@@ -90,7 +98,7 @@ index 24324fa51f..687d591e63 100755
      end
    end
  
-@@ -487,7 +509,7 @@ def target_platform
+@@ -487,7 +510,7 @@ def target_platform
    BT.platform or RUBY_PLATFORM
  end
  
@@ -99,7 +107,18 @@ index 24324fa51f..687d591e63 100755
    prepend Launchable
    @count = 0
    @all = Hash.new{|h, k| h[k] = []}
-@@ -657,7 +679,7 @@ def add_assertion src, pr
+@@ -650,6 +673,10 @@ def make_srcfile(frozen_string_literal: nil)
+     }
+     filename
+   end
++
++  def relative_path
++    Pathname.new(fullpath).relative_path_from(File.join(__dir__, '..')).to_s
++  end
+ end
+ 
+ def add_assertion src, pr
+@@ -657,7 +684,7 @@ def add_assertion src, pr
    lineno = loc.lineno
    path = File.basename(loc.path)
  

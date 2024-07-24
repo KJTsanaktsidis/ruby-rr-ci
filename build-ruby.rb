@@ -150,7 +150,7 @@ def _run_test(opts, testtask, test_file)
         File.absolute_path trace_archive_file
       end
       output_els.each do |el|
-        el.add_text "\n\n--- RR TRACE ---\n[[ATTACHMENT|#{absolute_trace_archive_file}]]\n"
+        el.add_text "\n\n--- RR TRACE ---\n#{el.xpath}\n[[ATTACHMENT|#{absolute_trace_archive_file}]]\n"
       end
       File.open(junit_xml_file, 'w') do |f|
         junit_doc.write(output: f)
