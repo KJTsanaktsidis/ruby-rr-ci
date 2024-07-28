@@ -54,7 +54,8 @@ pipeline {
         dir('ruby') {
           sh '../build-ruby.rb --build'
         }
-        sh './make_a_test_fail.sh'
+        // Uncomment to test the trace attachment handling
+        // sh './make_a_test_fail.sh'
       }
     }
     stage('Run tests') {
