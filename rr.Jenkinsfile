@@ -12,6 +12,7 @@ pipeline {
   agent {
     dockerfile {
       filename 'Dockerfile'
+      args '-u 0:0'
     }
   }
   parameters {
