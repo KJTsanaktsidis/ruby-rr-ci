@@ -76,6 +76,40 @@ def do_build(opts)
   end
 end
 
+def _attach_trace_to_test(junit_xml_file, trace_archive_file)
+  junit_doc = File.open(junit_xml_file, 'r') do |f|
+    REXML::Document.new f
+  end
+  output_els = []
+
+  fail_xpath = [
+    '//*/testsuite[descendant::error]',
+    '//*/testsuite[descendant::failure]',
+    '//*/testcase[descendant::error]',
+    '//*/testcase[descendant::failure]',
+  ].join(' | ')
+  REXML::XPath.each(junit_doc, fail_xpath) do |tc_el|
+    tc_el_stderr = REXML::XPath.first(tc_el, '/system-err')
+    if tc_el_stderr.nil?
+      tc_el_stderr = REXML::Element.new('system-err')
+      tc_el.add_element tc_el_stderr
+    end
+    output_els << tc_el_stderr
+  end
+
+  # The Jenkins JUnit attachment plugin wants this as an absolute path. The container we run in
+  # maps the workspace directory to the same path on the host and container, so this works.
+  File.absolute_path trace_archive_file
+  output_els.each do |el|
+    # Important that each stderr is unique, otherwise the jenkins test reporting machinery coalesces
+    # them together. So add the xpath of the element to it.
+    el.add_text "\n\n--- RR TRACE ---\n#{el.xpath}\n[[ATTACHMENT|#{absolute_trace_archive_file}]]\n"
+  end
+  File.open(junit_xml_file, 'w') do |f|
+    junit_doc.write(output: f)
+  end
+end
+
 def _run_test(opts, testtask, test_file)
   # cwd is assumed to be $srcdir/build
 
@@ -119,42 +153,8 @@ def _run_test(opts, testtask, test_file)
       sh! 'rr', 'pack', trace_dir
       trace_archive_file = File.join(test_output_dir, 'rr_trace.tar.gz')
       sh! 'tar', '-cz', '-f', trace_archive_file, '-C', test_output_dir, 'rr_trace'
-
       # Attach it to the test output using the JUnit Attachments convention
-      junit_doc = File.open(junit_xml_file, 'r') do |f|
-        REXML::Document.new f
-      end
-      output_els = []
-
-      fail_xpath = [
-        '//*/testsuite[descendant::error]',
-        '//*/testsuite[descendant::failure]',
-        '//*/testcase[descendant::error]',
-        '//*/testcase[descendant::failure]',
-      ].join(' | ')
-      REXML::XPath.each(junit_doc, fail_xpath) do |tc_el|
-        tc_el_stderr = REXML::XPath.first(tc_el, '/system-err')
-        if tc_el_stderr.nil?
-          tc_el_stderr = REXML::Element.new('system-err')
-          tc_el.add_element tc_el_stderr
-        end
-        output_els << tc_el_stderr
-      end
-
-
-      # The Jenkins JUnit attachment plugin wants this as an absolute path, but of course
-      # we run this script in a container...
-      absolute_trace_archive_file = if ENV.key?('RUBY_CHECKOUT_ABSOLUTE_PATH')
-        File.join(ENV['RUBY_CHECKOUT_ABSOLUTE_PATH'], 'build', trace_archive_file)
-      else
-        File.absolute_path trace_archive_file
-      end
-      output_els.each do |el|
-        el.add_text "\n\n--- RR TRACE ---\n#{el.xpath}\n[[ATTACHMENT|#{absolute_trace_archive_file}]]\n"
-      end
-      File.open(junit_xml_file, 'w') do |f|
-        junit_doc.write(output: f)
-      end
+      _attach_trace_to_test junit_xml_file, trace_archive_file
     end
   else
     puts "=> Test #{test_file} PASS"
