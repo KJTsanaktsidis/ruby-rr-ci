@@ -54,6 +54,7 @@ pipeline {
         dir('ruby') {
           sh '../build-ruby.rb --build'
         }
+        sh './make_a_test_fail.sh'
       }
     }
     stage('Run tests') {
