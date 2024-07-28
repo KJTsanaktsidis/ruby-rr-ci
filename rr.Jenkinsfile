@@ -1,6 +1,5 @@
 import groovy.json.JsonSlurper
 
-
 pipeline {
   triggers {
     cron 'H/30 * * * *'
@@ -55,7 +54,6 @@ pipeline {
         dir('ruby') {
           sh '../build-ruby.rb --build'
         }
-        sh 'bash make_a_test_fail.sh'
       }
     }
     stage('Run tests') {
