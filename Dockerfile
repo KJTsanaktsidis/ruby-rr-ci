@@ -1,4 +1,4 @@
-FROM quay.io/fedora/fedora:40 AS sources
+FROM quay.io/fedora/fedora:40
 
 WORKDIR /root
 
@@ -7,15 +7,31 @@ RUN <<BASHSCRIPT
   set -ex
 
   PACKAGES=(
-    dnf-plugins-core    # Provides `dnf download` and `dnf-builddep`
-    rpm-build           # Provies `rpmbuild` (used for unpacking srpms)
-    rpmspectool         # Provides `rpmspec`
-    patch               # We have some custom patches
-    hostname            # Used in script below to set "email"
-    git                 # We want `rr` straight from Git sources
-    clang               # Must build ASAN libraries with Clang!
-    compiler-rt         # clang asan dependency
-    libzstd-devel       # `rr` dependency, not (yet?) covered by builddep rr
+    # Provides `dnf download` and `dnf-builddep`
+    dnf-plugins-core
+    # Provies `rpmbuild` (used for unpacking srpms) and rpmspec
+    rpm-build rpmspectool
+    # LLVM toolchain (compiler-rt for ASAN, rust for YJIT)
+    clang compiler-rt rust
+    # BASERUBY
+    ruby-devel ruby-default-gems ruby-bundled-gems rubygem-rexml
+    # Ruby build system deps
+    make autoconf diffutils gperf
+    # Ruby's build dependency libraries
+    # Need the -devel versions, even though we have copies in /usr/local/asan, because
+    # we didn't copy the headers there.
+    openssl-devel libyaml-devel libffi-devel
+    readline-devel gdbm-devel zlib-ng-devel
+    zlib-ng-compat-devel
+    # `rr`s dependencies - they won't be automatically downloaded by anything
+    libzstd-devel capnproto-devel
+    # We don't need this to _run_ the tests, but it's convenient to be able to replay
+    # them in this container, so include GDB in here too.
+    gdb
+    # General build tools we need
+    patch git wget curl
+    # Misc junk draw
+    hostname procps-ng bash
   )
 
   dnf update --refresh -y
@@ -70,9 +86,8 @@ RUN <<BASHSCRIPT
   # Install the built shared objects into our ASAN directory
   install -v --mode=755 -t /usr/local/asan/lib libssl.so{,.3} libcrypto.so{,.3}
 
-  # Clean up build (but not source) dir
-  cd ..
-  rm -Rf build
+  cd ../..
+  rm -Rf openssl-$OPENSSL_VERSION
 BASHSCRIPT
 
 COPY libffi-unpoison-stack.patch .
@@ -107,9 +122,8 @@ RUN <<BASHSCRIPT
   # Install the built shared objects into our ASAN directory
   install -v --mode=755 -t /usr/local/asan/lib .libs/libffi.so{,.*}
 
-  # Clean up build (but not source) dir
-  cd ..
-  rm -Rf build
+  cd ../..
+  rm -Rf libffi-$LIBFFI_VERSION
 BASHSCRIPT
 
 RUN <<BASHSCRIPT
@@ -138,9 +152,8 @@ RUN <<BASHSCRIPT
   # Install the built shared objects into our ASAN directory
   install -v --mode=755 -t /usr/local/asan/lib src/.libs/libyaml*.so{,.*}
 
-  # Clean up build (but not source) dir
-  cd ..
-  rm -Rf build
+  cd ../..
+  rm -Rf yaml-$LIBYAM_VERSION
 BASHSCRIPT
 
 COPY rr-scratch-mapping-flag.patch .
@@ -182,38 +195,6 @@ RUN <<BASHSCRIPT
   make -j
   make install
 
-  cd ..
-  rm -Rf build
-BASHSCRIPT
-
-FROM quay.io/fedora/fedora:40
-
-COPY --from=sources /usr/local /usr/local
-RUN <<BASHSCRIPT
-  PACKAGES=(
-    # Compilers
-    clang compiler-rt rust
-    # BASERUBY
-    ruby-devel ruby-default-gems ruby-bundled-gems rubygem-rexml
-    # Ruby build system deps
-    make autoconf diffutils gperf
-    # Ruby's build dependency libraries
-    # Need the -devel versions, even though we have copies in /usr/local/asan, because
-    # we didn't copy the headers there.
-    openssl-devel libyaml-devel libffi-devel
-    readline-devel gdbm-devel zlib-ng-devel
-    zlib-ng-compat-devel
-    # `rr`s dependencies - they won't be automatically downloaded by anything
-    libzstd capnproto 
-    # Other nescessary utilities
-    git wget hostname patch
-    # We don't need this to _run_ the tests, but it's convenient to be able to replay
-    # them in this container, so include GDB in here too.
-    gdb
-  )
-  dnf update --refresh -y
-  dnf install -y "${PACKAGES[@]}"
-
-  git config --global user.name "ruby-rr-ci builder"
-  git config --global user.email "ruby-rr-ci-builder@$(hostname)"
+  cd ../..
+  rm -Rf rr
 BASHSCRIPT

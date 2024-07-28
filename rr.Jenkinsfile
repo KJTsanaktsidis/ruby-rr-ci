@@ -11,7 +11,7 @@ pipeline {
   }
   agent {
     dockerfile {
-      filename 'Containerfile'
+      filename 'Dockerfile'
     }
   }
   parameters {
