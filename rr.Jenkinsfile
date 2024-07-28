@@ -12,7 +12,11 @@ pipeline {
   agent {
     dockerfile {
       filename 'Dockerfile'
-      args '-u 0:0'
+      // This is not _actually_ running as root; Rootless docker uidmaps 0 to the
+      // user that's running the rootless docker daemon. So '-u 0:0' runs as the user
+      // that's mapped to the real minipc-agent Jenkins user.
+      // Also, disable seccomp to ensure we can access perf counters.
+      args '-u 0:0 --security-opt seccomp=unconfined'
     }
   }
   parameters {
