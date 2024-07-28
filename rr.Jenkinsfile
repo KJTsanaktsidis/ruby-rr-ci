@@ -9,9 +9,6 @@ pipeline {
     buildDiscarder(logRotator(numToKeepStr: '500', artifactNumToKeepStr: '500'))
     disableConcurrentBuilds()
   }
-  tools {
-    dockerTool 'podman-docker'
-  }
   agent {
     dockerfile {
       filename 'Containerfile'
