@@ -97,13 +97,13 @@ def _attach_trace_to_test(junit_xml_file, trace_archive_file)
     output_els << tc_el_stderr
   end
 
-  # The Jenkins JUnit attachment plugin wants this as an absolute path. The container we run in
-  # maps the workspace directory to the same path on the host and container, so this works.
-  File.absolute_path trace_archive_file
   output_els.each do |el|
-    # Important that each stderr is unique, otherwise the jenkins test reporting machinery coalesces
-    # them together. So add the xpath of the element to it.
-    el.add_text "\n\n--- RR TRACE ---\n#{el.xpath}\n[[ATTACHMENT|#{absolute_trace_archive_file}]]\n"
+    # Two things;
+    #   - The Jenkins JUnit attachment plugin wants this as an absolute path. The container we run in
+    #     maps the workspace directory to the same path on the host and container, so this works.
+    #   - Important that each stderr is unique, otherwise the jenkins test reporting machinery coalesces
+    #     them together. So add the xpath of the element to it.
+    el.add_text "\n\n--- RR TRACE ---\n#{el.xpath}\n[[ATTACHMENT|#{File.absolute_path trace_archive_file}]]\n"
   end
   File.open(junit_xml_file, 'w') do |f|
     junit_doc.write(output: f)
