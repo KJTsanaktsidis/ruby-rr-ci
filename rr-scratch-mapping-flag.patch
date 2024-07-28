@@ -1,0 +1,39 @@
+From aa874907283529c46ff8dcd6e5c1ac1c6642d3f0 Mon Sep 17 00:00:00 2001
+From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
+Date: Fri, 12 Jul 2024 13:24:40 +1000
+Subject: [PATCH] Set a mapping flag for per-thread scratch memory
+
+Fixes https://github.com/rr-debugger/rr/issues/3779 (somehow)
+---
+ src/AddressSpace.h    | 2 ++
+ src/record_syscall.cc | 1 +
+ 2 files changed, 3 insertions(+)
+
+diff --git a/src/AddressSpace.h b/src/AddressSpace.h
+index 2eae98a3..1500cdf3 100644
+--- a/src/AddressSpace.h
++++ b/src/AddressSpace.h
+@@ -315,6 +315,8 @@ public:
+       IS_RR_PAGE = 0x8,
+       // This mapping is the rr vdso page
+       IS_RR_VDSO_PAGE = 0x10,
++      // This mapping is the per-thread scratch space
++      IS_SCRATCH = 0x20,
+     };
+     uint32_t flags;
+   };
+diff --git a/src/record_syscall.cc b/src/record_syscall.cc
+index 4817818e..a74b24fd 100644
+--- a/src/record_syscall.cc
++++ b/src/record_syscall.cc
+@@ -3375,6 +3375,7 @@ static void init_scratch_memory(RecordTask* t,
+ 
+   KernelMapping km =
+       t->vm()->map(t, t->scratch_ptr, sz, prot, flags, 0, string());
++  t->vm()->mapping_flags_of(t->scratch_ptr) |= AddressSpace::Mapping::IS_SCRATCH;
+   struct stat stat;
+   memset(&stat, 0, sizeof(stat));
+   auto record_in_trace = t->trace_writer().write_mapped_region(t,
+-- 
+2.45.2
+

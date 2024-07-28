@@ -1,22 +1,7 @@
-@Library('ruby-rr-ci-shared')
-import au.id.kjtsanaktsidis.RubyRRCIShared
 import groovy.json.JsonSlurper
 
-fullImageName = ''
-def podmanRun(cmd) {
-    sh """
-      podman run --rm \
-        -v "\$(realpath .):/ruby-rr-ci:Z" \
-        -e "RUBY_CHECKOUT_ABSOLUTE_PATH=\$(realpath ruby)" \
-        --workdir /ruby-rr-ci/ruby \
-        --security-opt seccomp=unconfined \
-        ${fullImageName} \
-        ${cmd}
-    """
-}
 
 pipeline {
-  agent any
   triggers {
     cron 'H/30 * * * *'
   }
@@ -24,12 +9,12 @@ pipeline {
     buildDiscarder(logRotator(numToKeepStr: '500', artifactNumToKeepStr: '500'))
     disableConcurrentBuilds()
   }
+  agent {
+    dockerfile {
+      filename 'Containerfile'
+    }
+  }
   parameters {
-    string(
-      name: 'RUBY_RR_CI_IMAGE_TAG',
-      description: 'Docker image tag from https://github.com/KJTsanaktsidis/ruby-rr-ci-image to use',
-      defaultValue: 'latest',
-    )
     string(
       name: 'RUBY_COMMIT',
       description: 'Ruby commit to test',
@@ -48,21 +33,9 @@ pipeline {
             branches: [[name: params.RUBY_COMMIT]],
           )
         }
-        withCredentials([file(credentialsId: 'podman-auth.json', variable: 'REGISTRY_AUTH_FILE')]) {
-          sh "podman pull quay.io/kjtsanaktsidis/ruby-rr-ci:${params.RUBY_RR_CI_IMAGE_TAG}"
-        }
 
         script {
           def rubyVersion = sh(script: 'cd ruby; git rev-parse HEAD', returnStdout: true).trim()
-          def imageJson = sh(
-            script: "podman image inspect quay.io/kjtsanaktsidis/ruby-rr-ci:${params.RUBY_RR_CI_IMAGE_TAG}",
-            returnStdout: true
-          )
-          def imageJsonSlurp = new JsonSlurper().parseText(imageJson)
-          def imageDigest = imageJsonSlurp[0].Digest
-          fullImageName = "quay.io/kjtsanaktsidis/ruby-rr-ci@${imageDigest}"
-
-          setCustomBuildProperty(key: 'image_version', value: "${fullImageName}")
           setCustomBuildProperty(key: 'ruby_rr_ci_version', value: "${env.GIT_COMMIT}")
           setCustomBuildProperty(key: 'ruby_version', value: "${rubyVersion}")
           setCustomBuildProperty(key: 'rr', value: "true")
@@ -73,13 +46,17 @@ pipeline {
     }
     stage('Build ruby') {
       steps {
-        podmanRun('../build-ruby.rb --build')
+        dir('ruby') {
+          sh '../build-ruby.rb --build'
+        }
         sh 'bash make_a_test_fail.sh'
       }
     }
     stage('Run tests') {
       steps {
-        podmanRun('../build-ruby.rb --btest --rr')
+        dir('ruby') {
+          sh '../build-ruby.rb --btest --rr'
+        }
       }
     }
   }
@@ -91,14 +68,6 @@ pipeline {
        keepLongStdio: true,
        allowEmptyResults: true
       )
-      podmanRun('../build-ruby.rb --build-results')
-      publishHTML(target: [
-        reportName: 'Build results (HTML)',
-        keepAll: true,
-        alwaysLinkToLastBuild: true,
-        reportDir: 'ruby/build/build_report',
-        reportFiles: 'index.html',
-      ])
     }
   }
 }
