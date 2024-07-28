@@ -24,6 +24,7 @@ pipeline {
   stages {
     stage('Prepare') {
       steps {
+        sh('echo "is it possible for this to work at all?"')
         dir('ruby') {
           checkout scmGit(
             userRemoteConfigs: [[
