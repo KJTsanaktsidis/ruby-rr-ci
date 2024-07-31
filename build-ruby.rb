@@ -129,6 +129,7 @@ def _run_test(opts, testtask, test_file)
   testopts = [
     '-v','--tty=no',
     "--junit-filename=#{junit_xml_file}",
+    "--junit-suite-group-name=#{testtask}",
     test_file
   ]
   test_cmdline = [
@@ -166,7 +167,7 @@ def _run_test(opts, testtask, test_file)
 end
 
 def do_btest(opts)
-  puts "=> Running bootstrap tests"
+  puts "=> Running btest suite"
   chdir 'build' do
     test_files = Dir.glob('../bootstraptest/**/test_*.rb')
     successes = test_files.map do |test_file|
@@ -176,36 +177,17 @@ def do_btest(opts)
   end
 end
 
-def do_publish_build_results(opts)
-  puts "=> Producing build results"
+def do_test_tool(opts)
+  puts "=> Running test-tool suite"
   chdir 'build' do
-    failed_tests = []
-    Dir.glob('test_output_dir/**/junit.xml') do |junit_file|
-      junit_doc = File.open(junit_file, 'r') do |f|
-        REXML::Document.new f
-      end
-      REXML::XPath.each(junit_doc, '//*/testsuites').each do |suite_group_el|
-        REXML::XPath.each(suite_group_el, '//*/testsuite').each do |testsuite_el|
-          did_fail = !!REXML::XPath.first(testsuite_el, '*/failure | */error')
-          next unless did_fail
-
-          failed_tests << {
-            suite: suite_group_el.attribute('name'),
-            file: testsuite_el.attribute('file'),
-          }
-        end
-      end
+    test_files = Dir.glob('../tool/test/**/test_*.rb')
+    successes = test_files.map do |test_file|
+      _run_test(opts, 'test-tool', test_file)
     end
-
-    template = File.open(File.join(__dir__, 'build_report.html.erb'), 'r') do |f|
-      ERB.new(f.read)
-    end
-    mkdir_p 'build_report'
-    File.open('build_report/index.html', 'w') do |f|
-      f.write template.result_with_hash(failed_tests:)
-    end
+    raise "One or more tests failed; see output for details" unless successes.all?
   end
 end
+
 
 def check_working_perf_counters!
   puts "=> Checking which CPUs have working perf counters"
@@ -240,12 +222,12 @@ OptionParser.new do |opts|
     options[:steps] << method(:do_build)
   end
 
-  opts.on('--btest', 'Run bootstrap tests') do
+  opts.on('--btest', 'Run btest suite') do
     options[:steps] << method(:do_btest)
   end
 
-  opts.on('--build-results', 'Render build results') do
-    options[:steps] << method(:do_publish_build_results)
+  opts.on('--test-tool', 'Run test-tool suite') do
+    options[:steps] << method(:do_test_tool)
   end
 
   opts.on('--asan', 'Enable ASAN') do
