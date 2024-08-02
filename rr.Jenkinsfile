@@ -58,10 +58,17 @@ pipeline {
         // sh './make_a_test_fail.sh'
       }
     }
-    stage('Run tests') {
+    stage('Run test suite (btest)') {
       steps {
         dir('ruby') {
           sh '../build-ruby.rb --btest --rr'
+        }
+      }
+    }
+    stage('Run test suite (test-tool)') {
+      steps {
+        dir('ruby') {
+          sh '../build-ruby.rb --test-tool --rr'
         }
       }
     }

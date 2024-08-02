@@ -1,12 +1,13 @@
-From eb6301cc27cf8a4d598efeef4651cbb41165d24d Mon Sep 17 00:00:00 2001
+From d51e6b686174def5198d07ea731ebda224223864 Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
 Subject: [PATCH] Implement JUnit XML test reporting
 
 ---
  bootstraptest/runner.rb      |  40 +++++-
- tool/lib/junit_xml_output.rb | 246 +++++++++++++++++++++++++++++++++++
- 2 files changed, 282 insertions(+), 4 deletions(-)
+ tool/lib/junit_xml_output.rb | 266 +++++++++++++++++++++++++++++++++++
+ tool/lib/test/unit.rb        |   2 +
+ 3 files changed, 304 insertions(+), 4 deletions(-)
  create mode 100644 tool/lib/junit_xml_output.rb
 
 diff --git a/bootstraptest/runner.rb b/bootstraptest/runner.rb
@@ -134,10 +135,10 @@ index 24324fa51f..dd0376b76d 100755
  def assert_equal(expected, testsrc, message = '', opt = '', **kwargs)
 diff --git a/tool/lib/junit_xml_output.rb b/tool/lib/junit_xml_output.rb
 new file mode 100644
-index 0000000000..a1a3e05d8e
+index 0000000000..cba5a16587
 --- /dev/null
 +++ b/tool/lib/junit_xml_output.rb
-@@ -0,0 +1,246 @@
+@@ -0,0 +1,266 @@
 +require 'time'
 +
 +module JUnitXMLOutput
@@ -289,6 +290,8 @@ index 0000000000..a1a3e05d8e
 +      end
 +    end
 +
++    attr_reader :test_suite_group, :current_testsuite, :current_testcase
++
 +    def test_run_name
 +      @test_suite_group.name
 +    end
@@ -341,9 +344,9 @@ index 0000000000..a1a3e05d8e
 +      @current_testsuite.testcases << @current_testcase
 +    end
 +
-+    def finished_testcase!(did_pass)
++    def finished_testcase!(did_pass = nil)
 +      @current_testcase.finished_at = Time.now
-+      @current_testcase.did_pass = did_pass
++      @current_testcase.did_pass = did_pass if did_pass
 +      @current_testcase.output_capture.finish!
 +      @current_testsuite.test_count += 1
 +      @current_testsuite.failure_count += 1 unless did_pass
@@ -373,17 +376,55 @@ index 0000000000..a1a3e05d8e
 +      opts.on_tail '--junit-suite-group-name=NAME', String, 'Suite group name to put in Junit XML output' do |name|
 +        @junit_xml_suite_group_name = name
 +      end
-+
 +    end
 +
++    private def _calc_suite_name(suite) = ::Class.instance_method(:name).bind(suite).call.to_s
++    private def _calc_test_name(inst) = "#{_calc_suite_name(inst.class)}##{inst.__name__.to_s}"
++    private def _calc_test_file_line(inst) = ::Object.instance_method(:method).bind(inst).call(inst.__name__).source_location
++
 +    private def _run_suite(suite, type)
-+      puts "_run_suite start #{suite.inspect}, #{type.inspect}"
-+      s = super
-+      puts "_run_suite finish #{suite.inspect}, #{type.inspect}"
-+      s
++      @junit_xml_reporter&.started_testsuite! _calc_suite_name(suite)
++      return super
++    ensure
++      @junit_xml_reporter&.finished_testsuite!
++    end
++
++    private def _start_method(inst)
++      @junit_xml_reporer&.started_testcase! _calc_test_name(inst), *_calc_test_file_line(inst)
++      super
++    end
++
++    private def _end_method(inst)
++      @junit_xml_reporer&.finished_testcase!
++      super
++    end
++
++    def record(suite, method, assertions, time, error, source_location = nil)
++      @junit_xml_reporter&.current_testcase&.did_pass = error.nil?
++      super
 +    end
 +  end
 +end
+diff --git a/tool/lib/test/unit.rb b/tool/lib/test/unit.rb
+index be619e1445..1cdf4fbfc7 100644
+--- a/tool/lib/test/unit.rb
++++ b/tool/lib/test/unit.rb
+@@ -19,6 +19,7 @@ def warn(message, category: nil, **kwargs)
+ require_relative '../colorize'
+ require_relative '../leakchecker'
+ require_relative '../test/unit/testcase'
++require_relative '../junit_xml_output'
+ require 'optparse'
+ 
+ # See Test::Unit
+@@ -1789,6 +1790,7 @@ def status io = self.output
+       prepend Test::Unit::TimeoutOption
+       prepend Test::Unit::RunCount
+       prepend Test::Unit::LaunchableOption::Nothing
++      prepend JUnitXMLOutput::TestUnitSupport
+ 
+       ##
+       # Begins the full test run. Delegates to +runner+'s #_run method.
 -- 
 2.45.2
 
