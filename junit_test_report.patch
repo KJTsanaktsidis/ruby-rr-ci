@@ -1,17 +1,17 @@
-From 360888735da2718df12f0a6c2080c899df9f8b6d Mon Sep 17 00:00:00 2001
+From 21d97cfadc4be77b80e0e77126a4cdd803ccdbb1 Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
 Subject: [PATCH] Implement JUnit XML test reporting
 
 ---
- bootstraptest/runner.rb      |  40 +++++-
- tool/lib/junit_xml_output.rb | 266 +++++++++++++++++++++++++++++++++++
+ bootstraptest/runner.rb      |  40 ++++-
+ tool/lib/junit_xml_output.rb | 284 +++++++++++++++++++++++++++++++++++
  tool/lib/test/unit.rb        |   5 +-
- 3 files changed, 306 insertions(+), 5 deletions(-)
+ 3 files changed, 324 insertions(+), 5 deletions(-)
  create mode 100644 tool/lib/junit_xml_output.rb
 
 diff --git a/bootstraptest/runner.rb b/bootstraptest/runner.rb
-index 24324fa51f..dd0376b76d 100755
+index 24324fa51f..2ad2db2c2a 100755
 --- a/bootstraptest/runner.rb
 +++ b/bootstraptest/runner.rb
 @@ -12,6 +12,7 @@
@@ -91,7 +91,7 @@ index 24324fa51f..dd0376b76d 100755
          BT_STATE.count += 1
          assertion.call
 +
-+        BT.junit_xml_writer&.finished_testcase!(BT_STATE.error == old_error)
++        BT.junit_xml_writer&.finished_testcase!(BT_STATE.error == old_error ? :failure : :pass)
        end
  
        if BT.tty
@@ -135,10 +135,10 @@ index 24324fa51f..dd0376b76d 100755
  def assert_equal(expected, testsrc, message = '', opt = '', **kwargs)
 diff --git a/tool/lib/junit_xml_output.rb b/tool/lib/junit_xml_output.rb
 new file mode 100644
-index 0000000000..c54a0d9793
+index 0000000000..44c4eb1418
 --- /dev/null
 +++ b/tool/lib/junit_xml_output.rb
-@@ -0,0 +1,266 @@
+@@ -0,0 +1,284 @@
 +require 'time'
 +
 +module JUnitXMLOutput
@@ -225,7 +225,7 @@ index 0000000000..c54a0d9793
 +
 +  class TestCase
 +    include XMLMethods
-+    attr_accessor :name, :started_at, :finished_at, :file, :line, :did_pass
++    attr_accessor :name, :started_at, :finished_at, :file, :line, :status
 +    attr_accessor :output_capture
 +
 +    def to_xml_string
@@ -236,9 +236,16 @@ index 0000000000..c54a0d9793
 +      attrs['line'] = @line if @line
 +
 +      body_parts = []
-+      unless @did_pass
++      case @status
++      when :pass
++      when :failure
 +        body_parts << '<failure />'
++      when :skipped
++        body_parts << '<skipped />'
++      when :error
++        body_parts << '<error />'
 +      end
++
 +      if @output_capture
 +        body_parts << build_xml_element('system-out', {}, xml_escape(@output_capture.captured))
 +      end
@@ -344,9 +351,9 @@ index 0000000000..c54a0d9793
 +      @current_testsuite.testcases << @current_testcase
 +    end
 +
-+    def finished_testcase!(did_pass = nil)
++    def finished_testcase!(status = nil)
 +      @current_testcase.finished_at = Time.now
-+      @current_testcase.did_pass = did_pass if did_pass
++      @current_testcase.status = status if status
 +      @current_testcase.output_capture.finish!
 +      @current_testsuite.test_count += 1
 +      @current_testsuite.failure_count += 1 unless did_pass
@@ -400,7 +407,18 @@ index 0000000000..c54a0d9793
 +    end
 +
 +    def record(suite, method, assertions, time, error, source_location = nil)
-+      @junit_xml_reporter&.current_testcase&.did_pass = error.nil?
++      status = case error
++      when nil
++        :pass
++      when Test::Unit::PendedError
++        :skipped
++      when Test::Unit::AssertionFailedError
++        :failure
++      else
++        :error
++      end
++
++      @junit_xml_reporter&.current_testcase&.status = status
 +      super
 +    end
 +  end
