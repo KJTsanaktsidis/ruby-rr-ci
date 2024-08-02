@@ -1,4 +1,4 @@
-From 21d97cfadc4be77b80e0e77126a4cdd803ccdbb1 Mon Sep 17 00:00:00 2001
+From 8df64cd3bf9314f672e0d7a8a704262c1d08dd33 Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
 Subject: [PATCH] Implement JUnit XML test reporting
@@ -135,7 +135,7 @@ index 24324fa51f..2ad2db2c2a 100755
  def assert_equal(expected, testsrc, message = '', opt = '', **kwargs)
 diff --git a/tool/lib/junit_xml_output.rb b/tool/lib/junit_xml_output.rb
 new file mode 100644
-index 0000000000..44c4eb1418
+index 0000000000..10a0cc67e3
 --- /dev/null
 +++ b/tool/lib/junit_xml_output.rb
 @@ -0,0 +1,284 @@
@@ -356,7 +356,7 @@ index 0000000000..44c4eb1418
 +      @current_testcase.status = status if status
 +      @current_testcase.output_capture.finish!
 +      @current_testsuite.test_count += 1
-+      @current_testsuite.failure_count += 1 unless did_pass
++      @current_testsuite.failure_count += 1 if [:failure, :error].include?(@current_testcase.status)
 +      @current_testcase = nil
 +    end
 +
