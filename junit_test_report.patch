@@ -1,4 +1,4 @@
-From d51e6b686174def5198d07ea731ebda224223864 Mon Sep 17 00:00:00 2001
+From 360888735da2718df12f0a6c2080c899df9f8b6d Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
 Subject: [PATCH] Implement JUnit XML test reporting
@@ -6,8 +6,8 @@ Subject: [PATCH] Implement JUnit XML test reporting
 ---
  bootstraptest/runner.rb      |  40 +++++-
  tool/lib/junit_xml_output.rb | 266 +++++++++++++++++++++++++++++++++++
- tool/lib/test/unit.rb        |   2 +
- 3 files changed, 304 insertions(+), 4 deletions(-)
+ tool/lib/test/unit.rb        |   5 +-
+ 3 files changed, 306 insertions(+), 5 deletions(-)
  create mode 100644 tool/lib/junit_xml_output.rb
 
 diff --git a/bootstraptest/runner.rb b/bootstraptest/runner.rb
@@ -135,7 +135,7 @@ index 24324fa51f..dd0376b76d 100755
  def assert_equal(expected, testsrc, message = '', opt = '', **kwargs)
 diff --git a/tool/lib/junit_xml_output.rb b/tool/lib/junit_xml_output.rb
 new file mode 100644
-index 0000000000..cba5a16587
+index 0000000000..c54a0d9793
 --- /dev/null
 +++ b/tool/lib/junit_xml_output.rb
 @@ -0,0 +1,266 @@
@@ -390,12 +390,12 @@ index 0000000000..cba5a16587
 +    end
 +
 +    private def _start_method(inst)
-+      @junit_xml_reporer&.started_testcase! _calc_test_name(inst), *_calc_test_file_line(inst)
++      @junit_xml_reporter&.started_testcase! _calc_test_name(inst), *_calc_test_file_line(inst)
 +      super
 +    end
 +
 +    private def _end_method(inst)
-+      @junit_xml_reporer&.finished_testcase!
++      @junit_xml_reporter&.finished_testcase!
 +      super
 +    end
 +
@@ -406,7 +406,7 @@ index 0000000000..cba5a16587
 +  end
 +end
 diff --git a/tool/lib/test/unit.rb b/tool/lib/test/unit.rb
-index be619e1445..1cdf4fbfc7 100644
+index be619e1445..0538bfa06b 100644
 --- a/tool/lib/test/unit.rb
 +++ b/tool/lib/test/unit.rb
 @@ -19,6 +19,7 @@ def warn(message, category: nil, **kwargs)
@@ -417,7 +417,20 @@ index be619e1445..1cdf4fbfc7 100644
  require 'optparse'
  
  # See Test::Unit
-@@ -1789,6 +1790,7 @@ def status io = self.output
+@@ -1674,10 +1675,11 @@ def _run_suite suite, type
+           puts if @verbose
+           $stdout.flush
+ 
+-          leakchecker.check("#{inst.class}\##{inst.__name__}")
+ 
+           _end_method(inst)
+ 
++          leakchecker.check("#{inst.class}\##{inst.__name__}")
++
+           inst._assertions
+         }
+         return assertions.size, assertions.inject(0) { |sum, n| sum + n }
+@@ -1789,6 +1791,7 @@ def status io = self.output
        prepend Test::Unit::TimeoutOption
        prepend Test::Unit::RunCount
        prepend Test::Unit::LaunchableOption::Nothing
