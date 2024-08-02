@@ -1,13 +1,13 @@
-From 06c3d2b6a9ba92f2e2342a3b7bef7ff7e50292fb Mon Sep 17 00:00:00 2001
+From bb6c81b68959e5c19cff192891a29b9d57e4caf3 Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
 Subject: [PATCH] Implement JUnit XML test reporting
 
 ---
  bootstraptest/runner.rb      |  40 ++++-
- tool/lib/junit_xml_output.rb | 290 +++++++++++++++++++++++++++++++++++
+ tool/lib/junit_xml_output.rb | 291 +++++++++++++++++++++++++++++++++++
  tool/lib/test/unit.rb        |   5 +-
- 3 files changed, 330 insertions(+), 5 deletions(-)
+ 3 files changed, 331 insertions(+), 5 deletions(-)
  create mode 100644 tool/lib/junit_xml_output.rb
 
 diff --git a/bootstraptest/runner.rb b/bootstraptest/runner.rb
@@ -135,10 +135,10 @@ index 24324fa51f..97a66f4911 100755
  def assert_equal(expected, testsrc, message = '', opt = '', **kwargs)
 diff --git a/tool/lib/junit_xml_output.rb b/tool/lib/junit_xml_output.rb
 new file mode 100644
-index 0000000000..7e13fab5c8
+index 0000000000..96fbae0005
 --- /dev/null
 +++ b/tool/lib/junit_xml_output.rb
-@@ -0,0 +1,290 @@
+@@ -0,0 +1,291 @@
 +require 'time'
 +
 +module JUnitXMLOutput
@@ -404,11 +404,12 @@ index 0000000000..7e13fab5c8
 +    def _calc_test_name(inst) = "#{_calc_suite_name(inst.class)}##{inst.__name__.to_s}"
 +    def _calc_test_file_line(inst) = ::Object.instance_method(:method).bind(inst).call(inst.__name__).source_location
 +
-+    def run_suites(suites, type)
-+      @junit_xml_reporter.test_suite_group.name = @junit_xml_suite_group_name if @junit_xml_suite_group_name
-+      @junit_xml_reporter.started!
++    def _run_suites(suites, type)
++      @junit_xml_reporter&.test_suite_group.name = @junit_xml_suite_group_name if @junit_xml_suite_group_name
++      @junit_xml_reporter&.started!
++      super
 +    ensure
-+      @junit_xml_reporter.finished!
++      @junit_xml_reporter&.finished!
 +    end
 +
 +    def _run_suite(suite, type)
