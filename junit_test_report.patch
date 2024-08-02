@@ -1,4 +1,4 @@
-From 8df64cd3bf9314f672e0d7a8a704262c1d08dd33 Mon Sep 17 00:00:00 2001
+From cf41579862949839fa61937677ac2812a1dbe461 Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
 Subject: [PATCH] Implement JUnit XML test reporting
@@ -11,7 +11,7 @@ Subject: [PATCH] Implement JUnit XML test reporting
  create mode 100644 tool/lib/junit_xml_output.rb
 
 diff --git a/bootstraptest/runner.rb b/bootstraptest/runner.rb
-index 24324fa51f..2ad2db2c2a 100755
+index 24324fa51f..97a66f4911 100755
 --- a/bootstraptest/runner.rb
 +++ b/bootstraptest/runner.rb
 @@ -12,6 +12,7 @@
@@ -91,7 +91,7 @@ index 24324fa51f..2ad2db2c2a 100755
          BT_STATE.count += 1
          assertion.call
 +
-+        BT.junit_xml_writer&.finished_testcase!(BT_STATE.error == old_error ? :failure : :pass)
++        BT.junit_xml_writer&.finished_testcase!(BT_STATE.error == old_error ? :pass : :failure)
        end
  
        if BT.tty
