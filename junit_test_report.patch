@@ -1,4 +1,4 @@
-From dea9688ee1ebd9cae5503a8519401d5baed0ea7a Mon Sep 17 00:00:00 2001
+From 35e68134a93756d75bfe9e6b18cf48d08cf6a7fa Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
 Subject: [PATCH] Implement JUnit XML test reporting
@@ -6,8 +6,8 @@ Subject: [PATCH] Implement JUnit XML test reporting
 ---
  bootstraptest/runner.rb      |  40 ++++-
  tool/lib/junit_xml_output.rb | 292 +++++++++++++++++++++++++++++++++++
- tool/lib/test/unit.rb        |   7 +-
- 3 files changed, 333 insertions(+), 6 deletions(-)
+ tool/lib/test/unit.rb        |   5 +-
+ 3 files changed, 332 insertions(+), 5 deletions(-)
  create mode 100644 tool/lib/junit_xml_output.rb
 
 diff --git a/bootstraptest/runner.rb b/bootstraptest/runner.rb
@@ -432,7 +432,7 @@ index 0000000000..009dfa8dcb
 +  end
 +end
 diff --git a/tool/lib/test/unit.rb b/tool/lib/test/unit.rb
-index be619e1445..0df7d73152 100644
+index be619e1445..0538bfa06b 100644
 --- a/tool/lib/test/unit.rb
 +++ b/tool/lib/test/unit.rb
 @@ -19,6 +19,7 @@ def warn(message, category: nil, **kwargs)
@@ -443,15 +443,6 @@ index be619e1445..0df7d73152 100644
  require 'optparse'
  
  # See Test::Unit
-@@ -1659,7 +1660,7 @@ def _run_suite suite, type
-           _start_method(inst)
-           inst._assertions = 0
- 
--          print "#{suite}##{method.inspect.sub(/\A:/, '')} = " if @verbose
-+          print "#{suite}##{method.inspect.sub(/\A:/, '')} = yyyy" if @verbose
- 
-           start_time = Time.now if @verbose
-           result =
 @@ -1674,10 +1675,11 @@ def _run_suite suite, type
            puts if @verbose
            $stdout.flush
