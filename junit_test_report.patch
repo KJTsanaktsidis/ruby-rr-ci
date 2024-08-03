@@ -1,4 +1,4 @@
-From e4295e40bb7d5fbc3b92a53db6751624dbc6d695 Mon Sep 17 00:00:00 2001
+From 51cfd11a580da9552eb10f6e67b00167ebaddcf4 Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
 Subject: [PATCH] Implement JUnit XML test reporting
@@ -6,9 +6,9 @@ Subject: [PATCH] Implement JUnit XML test reporting
 ---
  bootstraptest/runner.rb       |  40 ++++-
  test/rdoc/test_rdoc_parser.rb |   2 +
- tool/lib/junit_xml_output.rb  | 312 ++++++++++++++++++++++++++++++++++
+ tool/lib/junit_xml_output.rb  | 311 ++++++++++++++++++++++++++++++++++
  tool/lib/test/unit.rb         |   5 +-
- 4 files changed, 354 insertions(+), 5 deletions(-)
+ 4 files changed, 353 insertions(+), 5 deletions(-)
  create mode 100644 tool/lib/junit_xml_output.rb
 
 diff --git a/bootstraptest/runner.rb b/bootstraptest/runner.rb
@@ -149,10 +149,10 @@ index 51a16ce361..b4b3158764 100644
          assert_nil parser
 diff --git a/tool/lib/junit_xml_output.rb b/tool/lib/junit_xml_output.rb
 new file mode 100644
-index 0000000000..c76051a588
+index 0000000000..cc6bd93589
 --- /dev/null
 +++ b/tool/lib/junit_xml_output.rb
-@@ -0,0 +1,312 @@
+@@ -0,0 +1,311 @@
 +require 'time'
 +
 +module JUnitXMLOutput
@@ -425,9 +425,8 @@ index 0000000000..c76051a588
 +          stack = caller
 +          if stack.size == 0 && main_pid == Process.pid && $!.is_a?(SystemExit)
 +            @junit_xml_reporter.write_to_file path
-+            writer.close
 +          end
-+          end
++        end
 +      end
 +
 +      opts.on_tail '--junit-suite-group-name=NAME', String, 'Suite group name to put in Junit XML output' do |name|
