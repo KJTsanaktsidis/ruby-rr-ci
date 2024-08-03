@@ -1,13 +1,14 @@
-From 35e68134a93756d75bfe9e6b18cf48d08cf6a7fa Mon Sep 17 00:00:00 2001
+From 6058e6a6deda4df5daaa45194b1e12e98493a3bf Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
 Subject: [PATCH] Implement JUnit XML test reporting
 
 ---
- bootstraptest/runner.rb      |  40 ++++-
- tool/lib/junit_xml_output.rb | 292 +++++++++++++++++++++++++++++++++++
- tool/lib/test/unit.rb        |   5 +-
- 3 files changed, 332 insertions(+), 5 deletions(-)
+ bootstraptest/runner.rb       |  40 ++++-
+ test/rdoc/test_rdoc_parser.rb |   2 +
+ tool/lib/junit_xml_output.rb  | 304 ++++++++++++++++++++++++++++++++++
+ tool/lib/test/unit.rb         |   5 +-
+ 4 files changed, 346 insertions(+), 5 deletions(-)
  create mode 100644 tool/lib/junit_xml_output.rb
 
 diff --git a/bootstraptest/runner.rb b/bootstraptest/runner.rb
@@ -133,12 +134,25 @@ index 24324fa51f..97a66f4911 100755
  end
  
  def assert_equal(expected, testsrc, message = '', opt = '', **kwargs)
+diff --git a/test/rdoc/test_rdoc_parser.rb b/test/rdoc/test_rdoc_parser.rb
+index 51a16ce361..b4b3158764 100644
+--- a/test/rdoc/test_rdoc_parser.rb
++++ b/test/rdoc/test_rdoc_parser.rb
+@@ -103,6 +103,8 @@ def test_class_for_forbidden
+         File.chmod 0000, io.path
+         forbidden = @store.add_file io.path
+ 
++        puts "file: #{io.path}"
++        system 'ls', '-alh', io.path
+         parser = @RP.for forbidden, '', @options, :stats
+ 
+         assert_nil parser
 diff --git a/tool/lib/junit_xml_output.rb b/tool/lib/junit_xml_output.rb
 new file mode 100644
-index 0000000000..009dfa8dcb
+index 0000000000..a272f07067
 --- /dev/null
 +++ b/tool/lib/junit_xml_output.rb
-@@ -0,0 +1,292 @@
+@@ -0,0 +1,304 @@
 +require 'time'
 +
 +module JUnitXMLOutput
@@ -227,7 +241,7 @@ index 0000000000..009dfa8dcb
 +  class TestCase
 +    include XMLMethods
 +    attr_accessor :name, :started_at, :finished_at, :file, :line, :status
-+    attr_accessor :output_capture
++    attr_accessor :output_capture, :fail_message, :fail_class, :fail_data
 +
 +    def to_xml_string
 +      attrs = {}
@@ -237,14 +251,18 @@ index 0000000000..009dfa8dcb
 +      attrs['line'] = @line if @line
 +
 +      body_parts = []
++      fail_attrs = {}
++      fail_attrs['message'] = @fail_message if @fail_message
++      fail_attrs['type'] = @fail_class if @fail_class
++      fail_message_esc = @fail_message ? xml_escape(fail_message) : ''
 +      case @status
 +      when :pass
 +      when :failure
-+        body_parts << '<failure />'
++        body_parts << build_xml_element('failure', fail_attrs, fail_message_esc)
 +      when :skipped
 +        body_parts << '<skipped />'
 +      when :error
-+        body_parts << '<error />'
++        body_parts << build_xml_element('error', fail_attrs, fail_message_esc)
 +      end
 +
 +      if @output_capture
@@ -379,6 +397,14 @@ index 0000000000..009dfa8dcb
 +        :failure
 +      else
 +        :error
++      end
++
++      if tc = @junit_xml_reporter&.current_testcase
++        tc.status = status
++        tc.fail_class = error.class.to_s
++        tc.fail_message = error.message if error.respond_to?(:message)
++        tc.fail_data = error.inspect
++        tc.fail_data += "\n\n" + error.backtrace.join(' ') if error.respond_to?(:backtrace)
 +      end
 +
 +      @junit_xml_reporter&.current_testcase&.status = status
