@@ -1,14 +1,13 @@
-From 51cfd11a580da9552eb10f6e67b00167ebaddcf4 Mon Sep 17 00:00:00 2001
+From 4d627de538989ca15f36951e888fbf41d17dc7ab Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
 Subject: [PATCH] Implement JUnit XML test reporting
 
 ---
- bootstraptest/runner.rb       |  40 ++++-
- test/rdoc/test_rdoc_parser.rb |   2 +
- tool/lib/junit_xml_output.rb  | 311 ++++++++++++++++++++++++++++++++++
- tool/lib/test/unit.rb         |   5 +-
- 4 files changed, 353 insertions(+), 5 deletions(-)
+ bootstraptest/runner.rb      |  40 ++++-
+ tool/lib/junit_xml_output.rb | 311 +++++++++++++++++++++++++++++++++++
+ tool/lib/test/unit.rb        |   5 +-
+ 3 files changed, 351 insertions(+), 5 deletions(-)
  create mode 100644 tool/lib/junit_xml_output.rb
 
 diff --git a/bootstraptest/runner.rb b/bootstraptest/runner.rb
@@ -134,22 +133,9 @@ index 24324fa51f..97a66f4911 100755
  end
  
  def assert_equal(expected, testsrc, message = '', opt = '', **kwargs)
-diff --git a/test/rdoc/test_rdoc_parser.rb b/test/rdoc/test_rdoc_parser.rb
-index 51a16ce361..b4b3158764 100644
---- a/test/rdoc/test_rdoc_parser.rb
-+++ b/test/rdoc/test_rdoc_parser.rb
-@@ -103,6 +103,8 @@ def test_class_for_forbidden
-         File.chmod 0000, io.path
-         forbidden = @store.add_file io.path
- 
-+        puts "file: #{io.path}"
-+        system 'ls', '-alh', io.path
-         parser = @RP.for forbidden, '', @options, :stats
- 
-         assert_nil parser
 diff --git a/tool/lib/junit_xml_output.rb b/tool/lib/junit_xml_output.rb
 new file mode 100644
-index 0000000000..cc6bd93589
+index 0000000000..d5509e56dc
 --- /dev/null
 +++ b/tool/lib/junit_xml_output.rb
 @@ -0,0 +1,311 @@
@@ -404,7 +390,7 @@ index 0000000000..cc6bd93589
 +        tc.fail_class = error.class.to_s
 +        tc.fail_message = error.message if error.respond_to?(:message)
 +        tc.fail_data = error.inspect
-+        tc.fail_data += "\n\n" + error.backtrace.join(' ') if error.respond_to?(:backtrace)
++        tc.fail_data += "\n\n" + error.backtrace.join(' ') if error.respond_to?(:backtrace) && error.backtrace
 +      end
 +
 +      @junit_xml_reporter&.current_testcase&.status = status
