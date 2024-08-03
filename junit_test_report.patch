@@ -1,4 +1,4 @@
-From 9a05c3508b97957b3e5b393c5789d46b2f1eeb25 Mon Sep 17 00:00:00 2001
+From 21a61d27087b83efdf0291cd3485d951e82329e4 Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
 Subject: [PATCH] Implement JUnit XML test reporting
@@ -6,8 +6,8 @@ Subject: [PATCH] Implement JUnit XML test reporting
 ---
  bootstraptest/runner.rb      |  40 ++++-
  tool/lib/junit_xml_output.rb | 291 +++++++++++++++++++++++++++++++++++
- tool/lib/test/unit.rb        |   9 +-
- 3 files changed, 335 insertions(+), 5 deletions(-)
+ tool/lib/test/unit.rb        |  13 +-
+ 3 files changed, 337 insertions(+), 7 deletions(-)
  create mode 100644 tool/lib/junit_xml_output.rb
 
 diff --git a/bootstraptest/runner.rb b/bootstraptest/runner.rb
@@ -431,7 +431,7 @@ index 0000000000..96fbae0005
 +  end
 +end
 diff --git a/tool/lib/test/unit.rb b/tool/lib/test/unit.rb
-index be619e1445..b12019bbd8 100644
+index be619e1445..a2e584c501 100644
 --- a/tool/lib/test/unit.rb
 +++ b/tool/lib/test/unit.rb
 @@ -19,6 +19,7 @@ def warn(message, category: nil, **kwargs)
@@ -442,13 +442,23 @@ index be619e1445..b12019bbd8 100644
  require 'optparse'
  
  # See Test::Unit
+@@ -1659,7 +1660,7 @@ def _run_suite suite, type
+           _start_method(inst)
+           inst._assertions = 0
+ 
+-          print "#{suite}##{method.inspect.sub(/\A:/, '')} = " if @verbose
++          print "#{suite}##{method.inspect.sub(/\A:/, '')} = yyyy" if @verbose
+ 
+           start_time = Time.now if @verbose
+           result =
 @@ -1669,15 +1670,20 @@ def _run_suite suite, type
                inst.run self
              end
  
+-          print "%.2f s = " % (Time.now - start_time) if @verbose
 +          print " __HELLO1__ #{@verbose}__"
-           print "%.2f s = " % (Time.now - start_time) if @verbose
-+          print " __HELLO2__ #{@verbose}__"
++          print "%.2f s = zzzz" % (Time.now - start_time) if @verbose
++          print " __HELLO2__ #{result.inspect} #{@verbose}__"
            print result
 +          print " __HELLO3__ #{@verbose}__"
            puts if @verbose
