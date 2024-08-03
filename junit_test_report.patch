@@ -1,4 +1,4 @@
-From 6058e6a6deda4df5daaa45194b1e12e98493a3bf Mon Sep 17 00:00:00 2001
+From e4295e40bb7d5fbc3b92a53db6751624dbc6d695 Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
 Subject: [PATCH] Implement JUnit XML test reporting
@@ -6,9 +6,9 @@ Subject: [PATCH] Implement JUnit XML test reporting
 ---
  bootstraptest/runner.rb       |  40 ++++-
  test/rdoc/test_rdoc_parser.rb |   2 +
- tool/lib/junit_xml_output.rb  | 304 ++++++++++++++++++++++++++++++++++
+ tool/lib/junit_xml_output.rb  | 312 ++++++++++++++++++++++++++++++++++
  tool/lib/test/unit.rb         |   5 +-
- 4 files changed, 346 insertions(+), 5 deletions(-)
+ 4 files changed, 354 insertions(+), 5 deletions(-)
  create mode 100644 tool/lib/junit_xml_output.rb
 
 diff --git a/bootstraptest/runner.rb b/bootstraptest/runner.rb
@@ -149,10 +149,10 @@ index 51a16ce361..b4b3158764 100644
          assert_nil parser
 diff --git a/tool/lib/junit_xml_output.rb b/tool/lib/junit_xml_output.rb
 new file mode 100644
-index 0000000000..a272f07067
+index 0000000000..c76051a588
 --- /dev/null
 +++ b/tool/lib/junit_xml_output.rb
-@@ -0,0 +1,304 @@
+@@ -0,0 +1,312 @@
 +require 'time'
 +
 +module JUnitXMLOutput
@@ -417,9 +417,17 @@ index 0000000000..a272f07067
 +      super
 +      opts.on_tail '--junit-filename=PATH', String, 'JUnit XML format output' do |path|
 +        @junit_xml_reporter = JUnitXMLOutput::Writer.new
++        @junit_xml_report_path = path
++        main_pid = Process.pid
 +        at_exit do
-+          @junit_xml_reporter.write_to_file path
-+        end
++          # This block is executed when the fork block in a test is completed.
++          # Therefore, we need to verify whether all tests have been completed.
++          stack = caller
++          if stack.size == 0 && main_pid == Process.pid && $!.is_a?(SystemExit)
++            @junit_xml_reporter.write_to_file path
++            writer.close
++          end
++          end
 +      end
 +
 +      opts.on_tail '--junit-suite-group-name=NAME', String, 'Suite group name to put in Junit XML output' do |name|
