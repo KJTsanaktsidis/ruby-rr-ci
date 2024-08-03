@@ -136,6 +136,7 @@ def _run_test(opts, testtask, test_file)
     'make',
     "TESTOPTS=#{Shellwords.join(testopts)}",
     "PRECHECK_TEST_ALL=",
+    "SHOWFLAGS=",
     testtask
   ]
 
