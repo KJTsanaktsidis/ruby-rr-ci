@@ -158,7 +158,13 @@ def _run_test(opts, testtask, test_file)
       trace_archive_file = File.join(test_output_dir, 'rr_trace.tar.gz')
       sh! 'tar', '-cz', '-f', trace_archive_file, '-C', test_output_dir, 'rr_trace'
       # Attach it to the test output using the JUnit Attachments convention
-      _attach_trace_to_test junit_xml_file, trace_archive_file
+      begin
+        _attach_trace_to_test junit_xml_file, trace_archive_file
+      rescue => innerex
+        puts "==> Attaching trace to test failed"
+        puts innerex.inspect
+        puts innerex.backtrace.join("\n")
+      end
     end
   else
     puts "=> Test #{test_file} PASS"
