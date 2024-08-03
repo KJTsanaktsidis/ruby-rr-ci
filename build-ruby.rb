@@ -188,6 +188,17 @@ def do_test_tool(opts)
   end
 end
 
+def do_test_all(opts)
+  puts "=> Running test-allsuite"
+  chdir 'build' do
+    test_files = Dir.glob('../test/**/test_*.rb')
+    successes = test_files.map do |test_file|
+      _run_test(opts, 'test-all', test_file)
+    end
+    raise "One or more tests failed; see output for details" unless successes.all?
+  end
+end
+
 
 def check_working_perf_counters!
   puts "=> Checking which CPUs have working perf counters"
@@ -228,6 +239,10 @@ OptionParser.new do |opts|
 
   opts.on('--test-tool', 'Run test-tool suite') do
     options[:steps] << method(:do_test_tool)
+  end
+
+  opts.on('--test-all', 'Run test-all suite') do
+    options[:steps] << method(:do_test_all)
   end
 
   opts.on('--asan', 'Enable ASAN') do

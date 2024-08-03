@@ -72,6 +72,13 @@ pipeline {
         }
       }
     }
+    stage('Run test suite (test-all)') {
+      steps {
+        dir('ruby') {
+          sh '../build-ruby.rb --test-all --rr'
+        }
+      }
+    }
   }
   post {
     always {
