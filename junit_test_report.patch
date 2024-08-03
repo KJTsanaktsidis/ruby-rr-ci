@@ -1,4 +1,4 @@
-From bb6c81b68959e5c19cff192891a29b9d57e4caf3 Mon Sep 17 00:00:00 2001
+From 8d2f0cee0abae62534cf2e7d9f34dfc0452fa6c5 Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
 Subject: [PATCH] Implement JUnit XML test reporting
@@ -6,8 +6,8 @@ Subject: [PATCH] Implement JUnit XML test reporting
 ---
  bootstraptest/runner.rb      |  40 ++++-
  tool/lib/junit_xml_output.rb | 291 +++++++++++++++++++++++++++++++++++
- tool/lib/test/unit.rb        |   5 +-
- 3 files changed, 331 insertions(+), 5 deletions(-)
+ tool/lib/test/unit.rb        |   8 +-
+ 3 files changed, 334 insertions(+), 5 deletions(-)
  create mode 100644 tool/lib/junit_xml_output.rb
 
 diff --git a/bootstraptest/runner.rb b/bootstraptest/runner.rb
@@ -431,7 +431,7 @@ index 0000000000..96fbae0005
 +  end
 +end
 diff --git a/tool/lib/test/unit.rb b/tool/lib/test/unit.rb
-index be619e1445..0538bfa06b 100644
+index be619e1445..d68556064f 100644
 --- a/tool/lib/test/unit.rb
 +++ b/tool/lib/test/unit.rb
 @@ -19,6 +19,7 @@ def warn(message, category: nil, **kwargs)
@@ -442,8 +442,16 @@ index be619e1445..0538bfa06b 100644
  require 'optparse'
  
  # See Test::Unit
-@@ -1674,10 +1675,11 @@ def _run_suite suite, type
+@@ -1669,15 +1670,19 @@ def _run_suite suite, type
+               inst.run self
+             end
+ 
++          print " __HELLO1__ "
+           print "%.2f s = " % (Time.now - start_time) if @verbose
+           print result
++          print " __HELLO2__ "
            puts if @verbose
++          print " __HELLO3__ \n"
            $stdout.flush
  
 -          leakchecker.check("#{inst.class}\##{inst.__name__}")
@@ -455,7 +463,7 @@ index be619e1445..0538bfa06b 100644
            inst._assertions
          }
          return assertions.size, assertions.inject(0) { |sum, n| sum + n }
-@@ -1789,6 +1791,7 @@ def status io = self.output
+@@ -1789,6 +1794,7 @@ def status io = self.output
        prepend Test::Unit::TimeoutOption
        prepend Test::Unit::RunCount
        prepend Test::Unit::LaunchableOption::Nothing
