@@ -133,7 +133,10 @@ def _run_test(opts, testtask, test_file)
     test_file
   ]
   test_cmdline = [
-    'make', "TESTOPTS=#{Shellwords.join(testopts)}", testtask
+    'make',
+    "TESTOPTS=#{Shellwords.join(testopts)}",
+    "PRECHECK_TEST_ALL=",
+    testtask
   ]
 
   trace_dir = File.join(test_output_dir, 'rr_trace')
