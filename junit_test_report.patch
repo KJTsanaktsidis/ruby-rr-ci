@@ -1,13 +1,13 @@
-From 21a61d27087b83efdf0291cd3485d951e82329e4 Mon Sep 17 00:00:00 2001
+From dea9688ee1ebd9cae5503a8519401d5baed0ea7a Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
 Subject: [PATCH] Implement JUnit XML test reporting
 
 ---
  bootstraptest/runner.rb      |  40 ++++-
- tool/lib/junit_xml_output.rb | 291 +++++++++++++++++++++++++++++++++++
- tool/lib/test/unit.rb        |  13 +-
- 3 files changed, 337 insertions(+), 7 deletions(-)
+ tool/lib/junit_xml_output.rb | 292 +++++++++++++++++++++++++++++++++++
+ tool/lib/test/unit.rb        |   7 +-
+ 3 files changed, 333 insertions(+), 6 deletions(-)
  create mode 100644 tool/lib/junit_xml_output.rb
 
 diff --git a/bootstraptest/runner.rb b/bootstraptest/runner.rb
@@ -135,10 +135,10 @@ index 24324fa51f..97a66f4911 100755
  def assert_equal(expected, testsrc, message = '', opt = '', **kwargs)
 diff --git a/tool/lib/junit_xml_output.rb b/tool/lib/junit_xml_output.rb
 new file mode 100644
-index 0000000000..96fbae0005
+index 0000000000..009dfa8dcb
 --- /dev/null
 +++ b/tool/lib/junit_xml_output.rb
-@@ -0,0 +1,291 @@
+@@ -0,0 +1,292 @@
 +require 'time'
 +
 +module JUnitXMLOutput
@@ -152,9 +152,10 @@ index 0000000000..96fbae0005
 +      '&' => '&amp;',
 +    }.freeze
 +    XML_REPLACEMENTS_REGEX = Regexp.union(XML_REPLACEMENTS.keys).freeze
++    CONTROL_CHAR_REGEX = /(?=[[:cntrl:]])(?=[^\n\t])/
 +
 +    def xml_escape(str)
-+      str.to_s.gsub(/[[:cntrl:]]/, '').gsub(XML_REPLACEMENTS_REGEX, XML_REPLACEMENTS)
++      str.to_s.gsub(CONTROL_CHAR_REGEX, '').gsub(XML_REPLACEMENTS_REGEX, XML_REPLACEMENTS)
 +    end
 +
 +    def build_xml_element(element, attrs, body)
@@ -431,7 +432,7 @@ index 0000000000..96fbae0005
 +  end
 +end
 diff --git a/tool/lib/test/unit.rb b/tool/lib/test/unit.rb
-index be619e1445..a2e584c501 100644
+index be619e1445..0df7d73152 100644
 --- a/tool/lib/test/unit.rb
 +++ b/tool/lib/test/unit.rb
 @@ -19,6 +19,7 @@ def warn(message, category: nil, **kwargs)
@@ -451,18 +452,8 @@ index be619e1445..a2e584c501 100644
  
            start_time = Time.now if @verbose
            result =
-@@ -1669,15 +1670,20 @@ def _run_suite suite, type
-               inst.run self
-             end
- 
--          print "%.2f s = " % (Time.now - start_time) if @verbose
-+          print " __HELLO1__ #{@verbose}__"
-+          print "%.2f s = zzzz" % (Time.now - start_time) if @verbose
-+          print " __HELLO2__ #{result.inspect} #{@verbose}__"
-           print result
-+          print " __HELLO3__ #{@verbose}__"
+@@ -1674,10 +1675,11 @@ def _run_suite suite, type
            puts if @verbose
-+          print " __HELLO4__ #{@verbose}__\n"
            $stdout.flush
  
 -          leakchecker.check("#{inst.class}\##{inst.__name__}")
@@ -474,7 +465,7 @@ index be619e1445..a2e584c501 100644
            inst._assertions
          }
          return assertions.size, assertions.inject(0) { |sum, n| sum + n }
-@@ -1789,6 +1795,7 @@ def status io = self.output
+@@ -1789,6 +1791,7 @@ def status io = self.output
        prepend Test::Unit::TimeoutOption
        prepend Test::Unit::RunCount
        prepend Test::Unit::LaunchableOption::Nothing
