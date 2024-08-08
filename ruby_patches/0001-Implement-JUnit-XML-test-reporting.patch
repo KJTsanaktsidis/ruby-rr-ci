@@ -1,13 +1,13 @@
-From 4d627de538989ca15f36951e888fbf41d17dc7ab Mon Sep 17 00:00:00 2001
+From 00896c98d97070b95056e51499c12b1dae53e46f Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
-Subject: [PATCH] Implement JUnit XML test reporting
+Subject: [PATCH 1/2] Implement JUnit XML test reporting
 
 ---
  bootstraptest/runner.rb      |  40 ++++-
- tool/lib/junit_xml_output.rb | 311 +++++++++++++++++++++++++++++++++++
+ tool/lib/junit_xml_output.rb | 316 +++++++++++++++++++++++++++++++++++
  tool/lib/test/unit.rb        |   5 +-
- 3 files changed, 351 insertions(+), 5 deletions(-)
+ 3 files changed, 356 insertions(+), 5 deletions(-)
  create mode 100644 tool/lib/junit_xml_output.rb
 
 diff --git a/bootstraptest/runner.rb b/bootstraptest/runner.rb
@@ -135,10 +135,10 @@ index 24324fa51f..97a66f4911 100755
  def assert_equal(expected, testsrc, message = '', opt = '', **kwargs)
 diff --git a/tool/lib/junit_xml_output.rb b/tool/lib/junit_xml_output.rb
 new file mode 100644
-index 0000000000..d5509e56dc
+index 0000000000..69005879e6
 --- /dev/null
 +++ b/tool/lib/junit_xml_output.rb
-@@ -0,0 +1,311 @@
+@@ -0,0 +1,316 @@
 +require 'time'
 +
 +module JUnitXMLOutput
@@ -389,7 +389,12 @@ index 0000000000..d5509e56dc
 +        tc.status = status
 +        tc.fail_class = error.class.to_s
 +        tc.fail_message = error.message if error.respond_to?(:message)
-+        tc.fail_data = error.inspect
++        tc.fail_data = +"#{suite.name}##{method}"
++        if loc = (source_location || suite.instance_method(method).source_location)
++          tc.fail_data += "#{loc[0]}:#{loc[1]}"
++        end
++        tc.fail_data += "\n"
++        tc.fail_data += error.inspect
 +        tc.fail_data += "\n\n" + error.backtrace.join(' ') if error.respond_to?(:backtrace) && error.backtrace
 +      end
 +

@@ -46,7 +46,9 @@ def do_build(opts)
   end
 
   puts "=> Applying patches"
-  sh! 'patch', '-Np1', '-i', File.join(__dir__, 'junit_test_report.patch')
+  Dir.glob(File.join(__dir__, 'ruby_patches/*.patch')).each do |patch|
+    sh! 'patch', '-Np1', '-i', patch
+  end
 
   puts "=> Building Ruby"
   sh! "./autogen.sh"

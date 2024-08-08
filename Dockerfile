@@ -22,7 +22,7 @@ RUN <<BASHSCRIPT
     # we didn't copy the headers there.
     openssl-devel libyaml-devel libffi-devel
     readline-devel gdbm-devel zlib-ng-devel
-    zlib-ng-compat-devel
+    zlib-ng-compat-devel libcap-devel
     # `rr`s dependencies - they won't be automatically downloaded by anything
     libzstd-devel capnproto-devel
     # We don't need this to _run_ the tests, but it's convenient to be able to replay
