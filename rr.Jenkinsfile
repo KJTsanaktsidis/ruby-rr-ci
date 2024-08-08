@@ -8,9 +8,6 @@ pipeline {
     buildDiscarder(logRotator(numToKeepStr: '500', artifactNumToKeepStr: '500'))
     disableConcurrentBuilds()
   }
-  tools {
-    'org.jenkinsci.plugins.docker.commons.tools.DockerTool' 'podman-docker'
-  }
   agent {
     dockerfile {
       filename 'Dockerfile'
