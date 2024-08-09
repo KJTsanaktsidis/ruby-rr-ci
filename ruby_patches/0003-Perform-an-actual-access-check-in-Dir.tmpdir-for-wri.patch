@@ -1,0 +1,45 @@
+From 9e786450ff940a71926a0dd1a318425fc49a6ef9 Mon Sep 17 00:00:00 2001
+From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
+Date: Fri, 9 Aug 2024 10:02:39 +1000
+Subject: [PATCH 3/3] Perform an actual access check in Dir.tmpdir for
+ writability
+
+At the moment, this code is looking at the stat output to determine if a
+temp directory can be written to. However, just because the stat bits
+say that a directory is writable, does not make it so; and, likewise,
+the operating system may in fact grant access to paths that the stat
+bits and process UID say should be inaccessible.
+
+These systems include:
+
+* Posix ACL's
+* Linux's capabilities like CAP_DAC_OVERRIDE
+* Linux Security Modules like SELinux or AppArmor
+* Syscall filters like Linux's seccomp
+* Granular capability systems like FreeBSD's Capsicum
+* OpenBSD's pledge and unveil
+* Windows too has a rich ACL system for controlling filesystem access
+
+The best thing to do is simply to try and access the path with
+`File.writable?` and let the operating system tell us if the path can be
+accessed.
+---
+ lib/tmpdir.rb | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/tmpdir.rb b/lib/tmpdir.rb
+index fe3e0e19d1..99946cb848 100644
+--- a/lib/tmpdir.rb
++++ b/lib/tmpdir.rb
+@@ -36,7 +36,7 @@ def self.tmpdir
+       case
+       when !stat.directory?
+         warn "#{name} is not a directory: #{dir}"
+-      when !stat.writable?
++      when !File.writable?(dir)
+         warn "#{name} is not writable: #{dir}"
+       when stat.world_writable? && !stat.sticky?
+         warn "#{name} is world-writable: #{dir}"
+-- 
+2.45.2
+
