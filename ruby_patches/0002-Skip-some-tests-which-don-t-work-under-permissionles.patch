@@ -1,7 +1,7 @@
 From 4ad990f384cb9c33e37d03d5d2ef43539a569027 Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Thu, 8 Aug 2024 21:24:13 +1000
-Subject: [PATCH 2/3] Skip some tests which don't work under permissionless
+Subject: [PATCH 2/4] Skip some tests which don't work under permissionless
  containers
 
 When running as UID 0 but without CAP_DAC_OVERRIDE (which ruby-rr-ci

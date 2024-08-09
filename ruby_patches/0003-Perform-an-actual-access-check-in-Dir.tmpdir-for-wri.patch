@@ -1,7 +1,7 @@
 From 9e786450ff940a71926a0dd1a318425fc49a6ef9 Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Fri, 9 Aug 2024 10:02:39 +1000
-Subject: [PATCH 3/3] Perform an actual access check in Dir.tmpdir for
+Subject: [PATCH 3/4] Perform an actual access check in Dir.tmpdir for
  writability
 
 At the moment, this code is looking at the stat output to determine if a
