@@ -1,13 +1,13 @@
-From 5117157316c32707cb71f96e22c99d12d959f55d Mon Sep 17 00:00:00 2001
+From b9a822f4dd5366d0141ab80be046ec2b3de92f0b Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
 Subject: [PATCH 1/4] Implement JUnit XML test reporting
 
 ---
  bootstraptest/runner.rb      |  40 ++++-
- tool/lib/junit_xml_output.rb | 316 +++++++++++++++++++++++++++++++++++
+ tool/lib/junit_xml_output.rb | 321 +++++++++++++++++++++++++++++++++++
  tool/lib/test/unit.rb        |   5 +-
- 3 files changed, 356 insertions(+), 5 deletions(-)
+ 3 files changed, 361 insertions(+), 5 deletions(-)
  create mode 100644 tool/lib/junit_xml_output.rb
 
 diff --git a/bootstraptest/runner.rb b/bootstraptest/runner.rb
@@ -135,10 +135,10 @@ index 24324fa51f..97a66f4911 100755
  def assert_equal(expected, testsrc, message = '', opt = '', **kwargs)
 diff --git a/tool/lib/junit_xml_output.rb b/tool/lib/junit_xml_output.rb
 new file mode 100644
-index 0000000000..69005879e6
+index 0000000000..69e41fa8f6
 --- /dev/null
 +++ b/tool/lib/junit_xml_output.rb
-@@ -0,0 +1,316 @@
+@@ -0,0 +1,321 @@
 +require 'time'
 +
 +module JUnitXMLOutput
@@ -149,6 +149,7 @@ index 0000000000..69005879e6
 +      '>' => '&gt;',
 +      '"' => '&quot;',
 +      "'" => '&apos;',
++      "\r" => '&#13;',
 +      '&' => '&amp;',
 +    }.freeze
 +    XML_REPLACEMENTS_REGEX = Regexp.union(XML_REPLACEMENTS.keys).freeze
@@ -217,7 +218,7 @@ index 0000000000..69005879e6
 +      body_parts = testcases.map(&:to_xml_string)
 +
 +      if @output_capture
-+        body_parts << build_xml_element('system-out', {}, xml_escape(@output_capture.captured))
++        body_parts << build_xml_element('system-out', {}, xml_escape(@output_capture.safe_captured))
 +      end
 +
 +      build_xml_element('testsuite', attrs, body_parts.join)
@@ -252,7 +253,7 @@ index 0000000000..69005879e6
 +      end
 +
 +      if @output_capture
-+        body_parts << build_xml_element('system-out', {}, xml_escape(@output_capture.captured))
++        body_parts << build_xml_element('system-out', {}, xml_escape(@output_capture.safe_captured))
 +      end
 +
 +      build_xml_element('testcase', attrs, body_parts.join)
@@ -280,6 +281,10 @@ index 0000000000..69005879e6
 +      @pipe_r.close
 +      @old_stdout.close
 +      @old_stderr.close
++    end
++
++    def safe_captured
++      captured.force_encoding(Encoding::UTF_8).encode(Encoding::UTF_8, invalid: :replace, undef: :replace)
 +    end
 +
 +    private
