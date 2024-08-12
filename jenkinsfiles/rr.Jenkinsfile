@@ -16,6 +16,10 @@ pipeline {
       // that's mapped to the real minipc-agent Jenkins user.
       // Also, disable seccomp to ensure we can access perf counters.
       args '-u 0:0 --security-opt seccomp=unconfined --cap-drop=ALL'
+
+      // The Ruby Makefiles are not even _close_ to OK when run from a directory which
+      // contains spaces.
+      customWorkspace 'ruby_tests.rr'
     }
   }
   parameters {
@@ -28,7 +32,6 @@ pipeline {
   stages {
     stage('Prepare') {
       steps {
-        sh('echo "is it possible for this to work at all?"')
         dir('ruby') {
           checkout scmGit(
             userRemoteConfigs: [[
