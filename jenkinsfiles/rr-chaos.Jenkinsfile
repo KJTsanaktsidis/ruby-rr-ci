@@ -15,7 +15,7 @@ pipeline {
       // user that's running the rootless docker daemon. So '-u 0:0' runs as the user
       // that's mapped to the real minipc-agent Jenkins user.
       // Also, disable seccomp to ensure we can access perf counters.
-      args '-u 0:0 --security-opt seccomp=unconfined --cap-drop=ALL'
+      args '-u 0:0 --security-opt seccomp=unconfined --cap-drop=ALL --init'
 
       // The Ruby Makefiles are not even _close_ to OK when run from a directory which
       // contains spaces.
