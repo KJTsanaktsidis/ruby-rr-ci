@@ -19,7 +19,7 @@ pipeline {
 
       // The Ruby Makefiles are not even _close_ to OK when run from a directory which
       // contains spaces.
-      customWorkspace 'ruby_tests.rr'
+      customWorkspace "ruby_tests.rr@${env.EXECUTOR_NUMBER}"
     }
   }
   parameters {
