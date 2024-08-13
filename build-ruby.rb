@@ -146,7 +146,9 @@ def _run_test(opts, testtask, test_file)
   if opts[:rr]
     test_cmdline = [
       'taskset', '-c', $WORKING_RR_CPUS.join(','),
-      'rr', 'record', '--output-trace-dir', trace_dir, '--'
+      'rr', 'record', '--output-trace-dir', trace_dir,
+      *[opts[:chaos] ? '--chaos' : nil].compact,
+      '--'
     ] + test_cmdline
   end
 
@@ -237,6 +239,7 @@ options = {
   steps: [],
   asan: false,
   rr: false,
+  chaos: false,
 }
 OptionParser.new do |opts|
   opts.banner = "Usage: ruby_build.rb --build | --btest | --test | --spec"
@@ -262,6 +265,9 @@ OptionParser.new do |opts|
   end
   opts.on('--rr', 'Run tests under rr') do
     options[:rr] = true
+  end
+  opts.on('--chaos', 'Run tests under rr chaos mode') do
+    options[:chaos] = true
   end
 end.parse!
 
