@@ -32,6 +32,8 @@ RUN <<BASHSCRIPT
     patch git wget curl
     # Misc junk draw
     hostname procps-ng bash
+    # pernosco
+    python3 awscli
   )
 
   dnf update --refresh -y
@@ -197,4 +199,14 @@ RUN <<BASHSCRIPT
 
   cd ../..
   rm -Rf rr
+BASHSCRIPT
+
+RUN <<BASHSCRIPT
+  set -ex;
+  cd /usr/local
+  mkdir -p share
+  cd share
+  git clone https://github.com/Pernosco/pernosco-submit
+  cd ../bin
+  ln -svf ../share/pernosco-submit/pernosco-submit pernosco-submit
 BASHSCRIPT

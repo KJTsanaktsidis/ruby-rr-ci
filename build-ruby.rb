@@ -240,6 +240,7 @@ options = {
   steps: [],
   asan: false,
   rr: false,
+  pernosco: false,
   chaos: false,
 }
 OptionParser.new do |opts|
@@ -266,6 +267,9 @@ OptionParser.new do |opts|
   end
   opts.on('--rr', 'Run tests under rr') do
     options[:rr] = true
+    if system 'command', '-v', 'pernosco-submit'
+      options[:pernosco] = true
+    end
   end
   opts.on('--chaos', 'Run tests under rr chaos mode') do
     options[:chaos] = true
