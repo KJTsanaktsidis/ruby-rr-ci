@@ -56,18 +56,19 @@ def do_build(opts)
   mkdir 'build'
   chdir 'build' do
     hardenflags = HARDENFLAGS.dup
+    debugflags = DEBUGFLAGS.dup
     ldflags = LDFLAGS.dup
     configure_flags = CONFIGURE_FLAGS.dup
     cppflags = CPPFLAGS.dup
     if opts[:asan]
-      hardenflags << "-fsanitize=address"
+      debugflags << "-fsanitize=address"
       ldflags << "-Wl,-rpath=/usr/local/asan/lib -L/usr/local/asan/lib"
       configure_flags << "CC=clang"
       cppflags << "-DUSE_MN_THREADS=0"
     end
     sh! '../configure', *configure_flags,
       "optflags=#{OPTFLAGS.join(' ')}",
-      "debugflags=#{DEBUGFLAGS.join(' ')}",
+      "debugflags=#{debugflags.join(' ')}",
       "hardenflags=#{hardenflags.join(' ')}",
       "cppflags=#{cppflags.join(' ')}",
       "LDFLAGS=#{ldflags.join(' ')}"
