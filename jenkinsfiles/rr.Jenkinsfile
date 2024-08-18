@@ -46,7 +46,7 @@ pipeline {
     }
     stage('Build testing image') {
       steps {
-        sh 'podman build --tag "${CONTAINER_IMAGE} .'
+        sh 'podman build --tag "${CONTAINER_IMAGE}" .'
       }
     }
     stage('Build ruby') {
