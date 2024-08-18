@@ -19,7 +19,7 @@ pipeline {
     )
   }
   environment {
-    CONTAINER_IMAGE = "ruby-rr-ci:${env.JEKINS_TAG}"
+    CONTAINER_IMAGE = "ruby-rr-ci:${env.BUILD_TAG}"
   }
   stages {
     stage('Prepare SCM') {
