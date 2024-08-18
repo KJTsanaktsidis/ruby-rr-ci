@@ -46,12 +46,12 @@ pipeline {
     }
     stage('Build testing image') {
       steps {
-        sh 'podman build --tag "${CONTAINER_IMAGE}" .'
+        sh label: 'podman build', script: 'podman build --tag "${CONTAINER_IMAGE}" .'
       }
     }
     stage('Build ruby') {
       steps {
-        sh '''
+        sh label: 'make', script: '''
           podman run --rm \
             --mount type=bind,source="$(realpath .)",destination="$(realpath .)",relabel=shared \
             --workdir "$(realpath ./ruby)" \
@@ -68,9 +68,9 @@ pipeline {
         '''
       }
     }
-    stage('Run test suite (btest)') {
+    stage('Run test suite') {
       steps {
-        sh '''
+        sh label: 'make btest', script: '''
           podman run --rm \
             --mount type=bind,source="$(realpath .)",destination="$(realpath .)",relabel=shared \
             --workdir "$(realpath ./ruby)" \
@@ -85,11 +85,7 @@ pipeline {
             "${CONTAINER_IMAGE}" \
             ../build-ruby.rb --btest --rr
         '''
-      }
-    }
-    stage('Run test suite (test-tool)') {
-      steps {
-        sh '''
+        sh label: 'make test-tool', script: '''
           podman run --rm \
             --mount type=bind,source="$(realpath .)",destination="$(realpath .)",relabel=shared \
             --workdir "$(realpath ./ruby)" \
@@ -103,12 +99,7 @@ pipeline {
             --env "BUILD_GID=$(id -u)" \
             "${CONTAINER_IMAGE}" \
             ../build-ruby.rb --test-tool --rr
-        '''
-      }
-    }
-    stage('Run test suite (test-all)') {
-      steps {
-        sh '''
+        sh label: 'make test-all', script: '''
           podman run --rm \
             --mount type=bind,source="$(realpath .)",destination="$(realpath .)",relabel=shared \
             --workdir "$(realpath ./ruby)" \
