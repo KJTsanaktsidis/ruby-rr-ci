@@ -8,6 +8,8 @@ require 'open3'
 require 'pathname'
 require 'rexml'
 require 'erb'
+require 'securerandom'
+require 'timeout'
 
 CONFIGURE_FLAGS = %w[--disable-install-doc --enable-yjit]
 OPTFLAGS=%w[-O3]
@@ -23,6 +25,23 @@ def sh!(*args, **kwargs)
   fu_output_message Shellwords.join(args)
   system(*args, **kwargs, exception: true) 
   $!
+end
+
+def sh_with_timeout!(*args, timeout: nil, on_timeout: nil, **kwargs)
+  return sh!(*args, **kwargs) unless timeout && on_timeout
+
+  cmdname = Shellwords.join(args)
+  fu_output_message cmdname
+  pid = Process.spawn(*args, **kwargs)
+  _, status = begin
+    Timeout.timeout(timeout) { Process.waitpid2(pid) }
+  rescue Timeout::Error
+    $stderr.puts "=> Command #{cmdname} timed out after #{timeout} seconds. Killing."
+    on_timeout.call(pid)
+    Process.waitpid2 pid
+  end
+  raise "Command #{cmdname} failed: #{status.inspect}" unless status.success?
+  status
 end
 
 def sh(*args, **kwargs)
@@ -144,30 +163,59 @@ def _run_test(opts, testtask, test_file)
   ]
 
   trace_dir = File.join(test_output_dir, 'rr_trace')
+  cgroup = nil
+  on_rr_timeout = nil
+  if opts[:cgroup_base]
+    cgroup = File.join(opts[:cgroup_base], SecureRandom.hex)
+    Dir.mkdir(File.join('/sys/fs/cgroup', cgroup))
+    test_cmdline = ['cgexec', '-g', ":#{cgroup}"] + test_cmdline
+    on_rr_timeout = ->(pid) do
+      # Send SIGABRT to everything in the control group to give RR a few seconds to tidy everything up.
+      pids = File.read(File.join("/sys/fs/cgroup", cgroup, "cgroup.procs")).lines.map { _1.strip.to_i }
+      pids.each { Process.kill :SIGABRT, _1 rescue nil }
+      10.times do
+        pids = File.read(File.join("/sys/fs/cgroup", cgroup, "cgroup.procs")).lines.map { _1.strip.to_i }
+        break if pids.empty?
+        sleep 1
+      end
+      File.write('1', File.join("/sys/fs/cgroup", cgroup, "cgroup.kill"))
+      # That should make evertying shut down now.
+    end
+  end
   if opts[:rr]
     test_cmdline = [
       'taskset', '-c', $WORKING_RR_CPUS.join(','),
       'rr', 'record', '--output-trace-dir', trace_dir,
       *[opts[:chaos] ? '--chaos' : nil].compact,
+      '--wait', '--disable-avx-512',
       '--'
     ] + test_cmdline
   end
 
   begin
-    sh!(*test_cmdline)
+    sh_with_timeout!(*test_cmdline, timeout: opts[:test_timeout], on_timeout: on_rr_timeout)
   rescue => e
     puts "=> Test #{test_file} FAIL: #{e}"
     result = false
     if opts[:rr]
       # On failure, pack the trace dir if we were tracing
       sh! 'rr', 'pack', trace_dir
+      if opts[:pernosco]
+        binaries = ['ruby', 'miniruby']
+        binaries.concat Dir.glob('*.so')
+        binaries.concat Dir.glob('/.ext/**/*.so')
+        sh! 'pernosco-submit', 'analyze-build', "--build-dir", File.realpath('.'),
+          '--allow-source', '/usr/include',
+          '--allow-source', '/usr/lib',
+          '--allow-source', '/usr/local/include',
+          '--allow-source', '/usr/local/lib',
+          '--copy-sources', '..', trace_dir, *binaries
+      end
       trace_archive_file = File.join(test_output_dir, 'rr_trace.tar.gz')
       sh! 'tar', '-cz', '-f', trace_archive_file, '-C', test_output_dir, 'rr_trace'
-      sh! 'pernosco-submit', '--dry-run', "#{trace_archive_file}.pernosco", trace_dir, '..' if opts[:pernosco]
       # Attach it to the test output using the JUnit Attachments convention
       begin
         _attach_trace_to_test junit_xml_file, trace_archive_file
-        _attach_trace_to_test junit_xml_file, "#{trace_archive_file}.pernosco" if opts[:pernosco]
       rescue => innerex
         puts "==> Attaching trace to test failed"
         puts innerex.inspect
@@ -179,6 +227,7 @@ def _run_test(opts, testtask, test_file)
   end
   # Delete the unzipped trace dir (it's quite big)
   rm_rf trace_dir if opts[:rr]
+  rm_rf File.join('/sys/fs/cgroup', cgroup) if cgroup
 
   return result
 end
@@ -238,12 +287,26 @@ def check_working_perf_counters!
   puts "=> CPUs #{$WORKING_RR_CPUS.join(', ')} have working perf counters"
 end
 
+def check_can_make_cgroup!(opts)
+  # This won't work with non-unified cgroups, but I don't care.
+  self_cgroup = File.read('/proc/self/cgroup').lines.map { _1.strip.split(':').last }.first || ''
+  full_cgroup_path = File.join('/sys/fs/cgroup', self_cgroup)
+  if File.writable? full_cgroup_path
+    puts "=> Own cgroup hierarchy #{self_cgroup}"
+    opts[:cgroup_base] = self_cgroup
+  else
+    puts "=> Warning: Cannot create sub-cgroups, timeouts will not work."
+  end
+end
+
 options = {
   steps: [],
   asan: false,
   rr: false,
   pernosco: false,
   chaos: false,
+  cgroup_base: nil,
+  test_timeout: 60 * 30
 }
 OptionParser.new do |opts|
   opts.banner = "Usage: ruby_build.rb --build | --btest | --test | --spec"
@@ -276,8 +339,12 @@ OptionParser.new do |opts|
   opts.on('--chaos', 'Run tests under rr chaos mode') do
     options[:chaos] = true
   end
+  opts.on('--test-timeout=TIMEOUT', 'Time out individual test file runs (sconds)') do |timeout|
+    options[:test_timeout] = timeout.to_i
+  end
 end.parse!
 
 check_working_perf_counters! if options[:rr]
+check_can_make_cgroup!(options)
 options[:steps].each { _1.call(options) }
 

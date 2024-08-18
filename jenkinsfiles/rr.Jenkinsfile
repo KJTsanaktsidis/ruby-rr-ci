@@ -9,18 +9,9 @@ pipeline {
     disableConcurrentBuilds()
   }
   agent {
-    dockerfile {
-      filename 'Dockerfile'
-      // This is not _actually_ running as root; Rootless docker uidmaps 0 to the
-      // user that's running the rootless docker daemon. So '-u 0:0' runs as the user
-      // that's mapped to the real minipc-agent Jenkins user.
-      // Also, disable seccomp to ensure we can access perf counters.
-      args '-u 0:0 --security-opt seccomp=unconfined --cap-drop=ALL --init'
-
-      // The Ruby Makefiles are not even _close_ to OK when run from a directory which
-      // contains spaces.
-      customWorkspace 'ruby_tests.rr'
-    }
+    // Explicitly specify a node, we're depending on the same podman container image being
+    // available each time.
+    node { }
   }
   parameters {
     string(
@@ -29,8 +20,11 @@ pipeline {
       defaultValue: 'master',
     )
   }
+  environment {
+    CONTAINER_IMAGE = "ruby-rr-ci:${env.JEKINS_TAG}"
+  }
   stages {
-    stage('Prepare') {
+    stage('Prepare SCM') {
       steps {
         dir('ruby') {
           checkout scmGit(
@@ -52,34 +46,85 @@ pipeline {
         }
       }
     }
+    stage('Build testing image') {
+      steps {
+        sh 'podman build --tag "${CONTAINER_IMAGE} .'
+      }
+    }
     stage('Build ruby') {
       steps {
-        dir('ruby') {
-          sh '../build-ruby.rb --build'
-        }
-        // Uncomment to test the trace attachment handling
-        // sh './make_a_test_fail.sh'
+        sh '''
+          podman run --rm \
+            --mount type=bind,source="$(realpath .)",destination="$(realpath .)",relabel=shared \
+            --workdir "$(realpath ./ruby)" \
+            --security-opt unmask=/sys/fs/cgroup \
+            --security-opt label=disable \
+            --security-opt seccomp=unconfined \
+            --cgroupns private \
+            --userns=keep-id \
+            --user "0:0" \
+            --env "BUILD_UID=$(id -u)" \
+            --env "BUILD_GID=$(id -u)" \
+            "${CONTAINER_IMAGE}" \
+            ../build-ruby.rb --build
+        '''
       }
     }
     stage('Run test suite (btest)') {
       steps {
-        dir('ruby') {
-          sh '../build-ruby.rb --btest --rr'
-        }
+        sh '''
+          podman run --rm \
+            --mount type=bind,source="$(realpath .)",destination="$(realpath .)",relabel=shared \
+            --workdir "$(realpath ./ruby)" \
+            --security-opt unmask=/sys/fs/cgroup \
+            --security-opt label=disable \
+            --security-opt seccomp=unconfined \
+            --cgroupns private \
+            --userns=keep-id \
+            --user "0:0" \
+            --env "BUILD_UID=$(id -u)" \
+            --env "BUILD_GID=$(id -u)" \
+            "${CONTAINER_IMAGE}" \
+            ../build-ruby.rb --btest --rr
+        '''
       }
     }
     stage('Run test suite (test-tool)') {
       steps {
-        dir('ruby') {
-          sh '../build-ruby.rb --test-tool --rr'
-        }
+        sh '''
+          podman run --rm \
+            --mount type=bind,source="$(realpath .)",destination="$(realpath .)",relabel=shared \
+            --workdir "$(realpath ./ruby)" \
+            --security-opt unmask=/sys/fs/cgroup \
+            --security-opt label=disable \
+            --security-opt seccomp=unconfined \
+            --cgroupns private \
+            --userns=keep-id \
+            --user "0:0" \
+            --env "BUILD_UID=$(id -u)" \
+            --env "BUILD_GID=$(id -u)" \
+            "${CONTAINER_IMAGE}" \
+            ../build-ruby.rb --test-tool --rr
+        '''
       }
     }
     stage('Run test suite (test-all)') {
       steps {
-        dir('ruby') {
-          sh '../build-ruby.rb --test-all --rr'
-        }
+        sh '''
+          podman run --rm \
+            --mount type=bind,source="$(realpath .)",destination="$(realpath .)",relabel=shared \
+            --workdir "$(realpath ./ruby)" \
+            --security-opt unmask=/sys/fs/cgroup \
+            --security-opt label=disable \
+            --security-opt seccomp=unconfined \
+            --cgroupns private \
+            --userns=keep-id \
+            --user "0:0" \
+            --env "BUILD_UID=$(id -u)" \
+            --env "BUILD_GID=$(id -u)" \
+            "${CONTAINER_IMAGE}" \
+            ../build-ruby.rb --test-all --rr
+        '''
       }
     }
   }
@@ -91,6 +136,7 @@ pipeline {
        keepLongStdio: true,
        allowEmptyResults: true
       )
+      sh 'podman image untag "${CONTAINER_IMAGE}"'
     }
   }
 }

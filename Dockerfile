@@ -33,7 +33,9 @@ RUN <<BASHSCRIPT
     # Misc junk draw
     hostname procps-ng bash
     # pernosco
-    python3 awscli
+    python3 awscli openssl
+    # Tools for entrypoint script
+    libcap libcgroup-tools dumb-init util-linux
   )
 
   dnf update --refresh -y
@@ -210,3 +212,6 @@ RUN <<BASHSCRIPT
   cd ../bin
   ln -svf ../share/pernosco-submit/pernosco-submit pernosco-submit
 BASHSCRIPT
+
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
