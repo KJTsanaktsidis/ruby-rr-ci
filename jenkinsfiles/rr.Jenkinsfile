@@ -18,9 +18,6 @@ pipeline {
       defaultValue: 'master',
     )
   }
-  environment {
-    CONTAINER_IMAGE = "ruby-rr-ci:${env.BUILD_TAG}"
-  }
   stages {
     stage('Prepare SCM') {
       steps {
@@ -46,7 +43,7 @@ pipeline {
     }
     stage('Build testing image') {
       steps {
-        sh label: 'podman build', script: 'podman build --tag "${CONTAINER_IMAGE}" .'
+        sh label: 'podman build', script: 'podman build --iidfile image.txt .'
       }
     }
     stage('Build ruby') {
@@ -63,7 +60,7 @@ pipeline {
             --user "0:0" \
             --env "BUILD_UID=$(id -u)" \
             --env "BUILD_GID=$(id -u)" \
-            "${CONTAINER_IMAGE}" \
+            "$(cat image.txt)" \
             ../build-ruby.rb --build
         '''
       }
@@ -82,7 +79,7 @@ pipeline {
             --user "0:0" \
             --env "BUILD_UID=$(id -u)" \
             --env "BUILD_GID=$(id -u)" \
-            "${CONTAINER_IMAGE}" \
+            "$(cat image.txt)" \
             ../build-ruby.rb --btest --rr
         '''
         sh label: 'make test-tool', script: '''
@@ -97,7 +94,7 @@ pipeline {
             --user "0:0" \
             --env "BUILD_UID=$(id -u)" \
             --env "BUILD_GID=$(id -u)" \
-            "${CONTAINER_IMAGE}" \
+            "$(cat image.txt)" \
             ../build-ruby.rb --test-tool --rr
         '''
         sh label: 'make test-all', script: '''
@@ -112,7 +109,7 @@ pipeline {
             --user "0:0" \
             --env "BUILD_UID=$(id -u)" \
             --env "BUILD_GID=$(id -u)" \
-            "${CONTAINER_IMAGE}" \
+            "$(cat image.txt)" \
             ../build-ruby.rb --test-all --rr
         '''
       }
@@ -126,7 +123,6 @@ pipeline {
        keepLongStdio: true,
        allowEmptyResults: true
       )
-      sh label: 'untag testing image', script: 'podman image untag "${CONTAINER_IMAGE}"'
     }
   }
 }
