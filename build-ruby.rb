@@ -163,9 +163,11 @@ def _run_test(opts, testtask, test_file)
       sh! 'rr', 'pack', trace_dir
       trace_archive_file = File.join(test_output_dir, 'rr_trace.tar.gz')
       sh! 'tar', '-cz', '-f', trace_archive_file, '-C', test_output_dir, 'rr_trace'
+      sh! 'pernosco-submit', '--dry-run', "#{trace_archive_file}.pernosco", trace_dir, '..' if opts[:pernosco]
       # Attach it to the test output using the JUnit Attachments convention
       begin
         _attach_trace_to_test junit_xml_file, trace_archive_file
+        _attach_trace_to_test junit_xml_file, "#{trace_archive_file}.pernosco" if opts[:pernosco]
       rescue => innerex
         puts "==> Attaching trace to test failed"
         puts innerex.inspect
