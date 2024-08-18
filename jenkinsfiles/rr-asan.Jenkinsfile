@@ -123,7 +123,6 @@ pipeline {
        keepLongStdio: true,
        allowEmptyResults: true
       )
-      sh label: 'untag testing image', script: 'podman image untag "${CONTAINER_IMAGE}"'
     }
   }
 }
