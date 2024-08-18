@@ -99,6 +99,7 @@ pipeline {
             --env "BUILD_GID=$(id -u)" \
             "${CONTAINER_IMAGE}" \
             ../build-ruby.rb --test-tool --rr
+        '''
         sh label: 'make test-all', script: '''
           podman run --rm \
             --mount type=bind,source="$(realpath .)",destination="$(realpath .)",relabel=shared \
