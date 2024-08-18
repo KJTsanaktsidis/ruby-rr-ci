@@ -8,11 +8,9 @@ pipeline {
     buildDiscarder(logRotator(numToKeepStr: '500', artifactNumToKeepStr: '500'))
     disableConcurrentBuilds()
   }
-  agent {
-    // Explicitly specify a node, we're depending on the same podman container image being
-    // available each time.
-    node { }
-  }
+  // Explicitly specify a node, we're depending on the same podman container image being
+  // available each time.
+  agent any
   parameters {
     string(
       name: 'RUBY_COMMIT',
