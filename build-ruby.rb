@@ -17,6 +17,9 @@ DEBUGFLAGS=%w[-ggdb3 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer]
 HARDENFLAGS=%w[-U_FORTIFY_SOUCE -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fcf-protection=full]
 CPPFLAGS=%w[-DENABLE_PATH_CHECK=0 -DRUBY_DEBUG=1 -DVM_CHECK_MODE=1]
 LDFLAGS=%w[]
+TESTS_WITHOUT_SYSCALLBUF = [
+  'test/ruby/test_require.rb'
+].freeze
 
 include FileUtils::Verbose
 @fileutils_label = "==> "
@@ -187,6 +190,10 @@ def _run_test(opts, testtask, test_file)
       'taskset', '-c', $WORKING_RR_CPUS.join(','),
       'rr', 'record', '--output-trace-dir', trace_dir,
       *[opts[:chaos] ? '--chaos' : nil].compact,
+      # Some tests do things that break RR's in-process sycall accelerator thingy
+      # (e.g. deliberately exhaust all the FDs); run these tests in slowpoke mode
+      # with --no-syscall-buffer.
+      *[TESTS_WITHOUT_SYSCALLBUF.include?(relative_test_file) ? '--no-syscall-buffer' : nil].compact,
       '--wait', '--disable-avx-512',
       '--'
     ] + test_cmdline
