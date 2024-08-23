@@ -39,9 +39,10 @@ def sh_with_timeout!(*args, timeout: nil, on_timeout: nil, **kwargs)
   _, status = begin
     Timeout.timeout(timeout) { Process.waitpid2(pid) }
   rescue Timeout::Error
-    $stderr.puts "=> Command #{cmdname} timed out after #{timeout} seconds. Killing."
+    puts "=> Command #{cmdname} timed out after #{timeout} seconds. Killing."
     on_timeout.call(pid)
-    Process.waitpid2 pid
+    status, _ = Process.waitpid2 pid
+    puts "=> Command #{cmdname} reaped #{status.inspect}"
   end
   raise "Command #{cmdname} failed: #{status.inspect}" unless status.success?
   status
@@ -175,12 +176,15 @@ def _run_test(opts, testtask, test_file)
     on_rr_timeout = ->(pid) do
       # Send SIGABRT to everything in the control group to give RR a few seconds to tidy everything up.
       pids = File.read(File.join("/sys/fs/cgroup", cgroup, "cgroup.procs")).lines.map { _1.strip.to_i }
+      puts "=> Sending SIGABRT to #{pids.inspect} from #{cgroup}"
       pids.each { Process.kill :SIGABRT, _1 rescue nil }
       10.times do
         pids = File.read(File.join("/sys/fs/cgroup", cgroup, "cgroup.procs")).lines.map { _1.strip.to_i }
         break if pids.empty?
+        puts "=> (still waiting for #{pids.inspect} to exit"
         sleep 1
       end
+      puts "=> Killing cgroup #{cgroup}"
       File.write('1', File.join("/sys/fs/cgroup", cgroup, "cgroup.kill"))
       # That should make evertying shut down now.
     end
