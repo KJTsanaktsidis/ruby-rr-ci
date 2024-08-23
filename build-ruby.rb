@@ -203,8 +203,15 @@ def _run_test(opts, testtask, test_file)
     ] + test_cmdline
   end
 
+  test_env = {}
+  if opts[:asan]
+    # ASAN tests are slow!
+    test_env['RUBY_TEST_TIMEOUT_SCALE'] = '5'
+    test_env['SYNTAX_SUGGEST_TIMEOUT'] = '600'
+  end
+
   begin
-    sh_with_timeout!(*test_cmdline, timeout: opts[:test_timeout], on_timeout: on_rr_timeout)
+    sh_with_timeout!(test_env, *test_cmdline, timeout: opts[:test_timeout], on_timeout: on_rr_timeout)
   rescue => e
     puts "=> Test #{test_file} FAIL: #{e}"
     result = false
