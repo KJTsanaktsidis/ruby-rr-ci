@@ -80,7 +80,7 @@ pipeline {
             --env "BUILD_UID=$(id -u)" \
             --env "BUILD_GID=$(id -u)" \
             "$(cat image.txt)" \
-            ../build-ruby.rb --btest --rr
+            ../build-ruby.rb --btest --rr --asan
         '''
         sh label: 'make test-tool', script: '''
           podman run --rm \
@@ -95,7 +95,7 @@ pipeline {
             --env "BUILD_UID=$(id -u)" \
             --env "BUILD_GID=$(id -u)" \
             "$(cat image.txt)" \
-            ../build-ruby.rb --test-tool --rr
+            ../build-ruby.rb --test-tool --rr --asan
         '''
         sh label: 'make test-all', script: '''
           podman run --rm \
@@ -110,7 +110,7 @@ pipeline {
             --env "BUILD_UID=$(id -u)" \
             --env "BUILD_GID=$(id -u)" \
             "$(cat image.txt)" \
-            ../build-ruby.rb --test-all --rr
+            ../build-ruby.rb --test-all --rr --asan
         '''
       }
     }
