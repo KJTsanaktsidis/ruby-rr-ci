@@ -10,6 +10,7 @@ require 'rexml'
 require 'erb'
 require 'securerandom'
 require 'timeout'
+require 'fiddle'
 
 CONFIGURE_FLAGS = %w[--disable-install-doc --enable-yjit]
 OPTFLAGS=%w[-O3]
@@ -24,8 +25,34 @@ TESTS_WITHOUT_SYSCALLBUF = [
 include FileUtils::Verbose
 @fileutils_label = "==> "
 
+FIDDLE_LIBC = Fiddle.dlopen(nil)
+FIDDLE_PIDFD_OPEN_BINDING = Fiddle::Function.new(
+  FIDDLE_LIBC['pidfd_open'],
+  [Fiddle::TYPE_INT, Fiddle::TYPE_UINT], # input: pid_t pid, unsigned int flags
+  Fiddle::TYPE_INT # output: int fd
+)
+
+PIDFD_NONBLOCK = 04000
+def pidfd_open(pid, flags = 0)
+  raw_fd = FIDDLE_PIDFD_OPEN_BINDING.call(pid, flags)
+  raise "pidfd_open failed: #{raw_fd}" if raw_fd < 0
+  IO.for_fd(raw_fd)
+end
+
+def sh_get_command_string(*args)
+  cmd = args
+  env = {}
+  env = cmd.shift if cmd.first.is_a?(Hash)
+
+  env_str = env.map { |k, v| "#{Shellwords.escape(k)}=#{Shellwords.escape(v)}" }
+  cmd_str = Shellwords.join(cmd)
+
+  [(env.any? ? env_str : nil), cmd_str].compact.join(' ')
+end
+
+
 def sh!(*args, **kwargs)
-  fu_output_message Shellwords.join(args)
+  fu_output_message sh_get_command_string(*args)
   system(*args, **kwargs, exception: true) 
   $!
 end
@@ -33,19 +60,31 @@ end
 def sh_with_timeout!(*args, timeout: nil, on_timeout: nil, **kwargs)
   return sh!(*args, **kwargs) unless timeout && on_timeout
 
-  cmdname = Shellwords.join(args)
+  cmdname = sh_get_command_string(*args)
   fu_output_message cmdname
   pid = Process.spawn(*args, **kwargs)
-  _, status = begin
-    Timeout.timeout(timeout) { Process.waitpid2(pid) }
-  rescue Timeout::Error
-    puts "=> Command #{cmdname} timed out after #{timeout} seconds. Killing."
-    on_timeout.call(pid)
-    status, _ = Process.waitpid2 pid
-    puts "=> Command #{cmdname} reaped #{status.inspect}"
+  pidfd = pidfd_open(pid, PIDFD_NONBLOCK)
+
+  # Wait for the process to be finished, or for the timeout.
+  deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+  loop do
+    now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    wait_for = 0
+    if deadline && now >= deadline
+      puts "=> Command #{cmdname} timeout #{timeout} seconds exceeded."
+      on_timeout.call(pid)
+      deadline = nil
+    elsif deadline
+      wait_for = deadline - now
+    end
+    readable, _, _ = IO.select([pidfd], [], [], wait_for)
+    break if readable&.include?(pidfd)
   end
+  _, status = Process.waitpid2(pid)
   raise "Command #{cmdname} failed: #{status.inspect}" unless status.success?
   status
+ensure
+  pidfd&.close
 end
 
 def sh(*args, **kwargs)
