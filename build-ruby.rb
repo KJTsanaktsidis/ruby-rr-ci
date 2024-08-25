@@ -238,6 +238,11 @@ def _run_test(opts, testtask, test_file)
       # with --no-syscall-buffer.
       *[TESTS_WITHOUT_SYSCALLBUF.include?(relative_test_file) ? '--no-syscall-buffer' : nil].compact,
       '--wait', '--disable-avx-512',
+      # These are from running `rr cpufeatures` on... _my_ CPU (Tiger Lake, i7-1165G7).
+      # Are they a good set of defaults? Who knows.
+      '--disable-cpuid-features', '0x80050440,0x40140400',
+      '--disable-cpuid-features-ext', '0xc405814,0xe73fa021,0x3eff8ef',
+      '--disable-cpuid-features-xsave', '0xfffffff0',
       '--'
     ] + test_cmdline
   end
