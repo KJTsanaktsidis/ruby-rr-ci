@@ -160,7 +160,7 @@ RUN <<BASHSCRIPT
   rm -Rf yaml-$LIBYAM_VERSION
 BASHSCRIPT
 
-COPY rr-scratch-mapping-flag.patch .
+COPY rr-sigframe-conservative.patch
 RUN <<BASHSCRIPT
   set -ex
 
@@ -185,7 +185,7 @@ RUN <<BASHSCRIPT
   cd rr
 
   # This will start failing when the fix is merged upstream.
-  git am ~/rr-scratch-mapping-flag.patch
+  git am ~/rr-sigframe-conservative.patch
 
   mkdir build
   cd build

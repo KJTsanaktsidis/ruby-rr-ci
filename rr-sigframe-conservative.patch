@@ -1,0 +1,266 @@
+From c9b1eee6484699863de499ac5f82f7acdf7ea5c9 Mon Sep 17 00:00:00 2001
+From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
+Date: Sun, 25 Aug 2024 17:19:36 +1000
+Subject: [PATCH] Record that the sigframe write recorded is conservative
+
+When handling a signal in a tracee, the kernel will spill some data to
+the stack (the "sigframe"), and this data needs to be recorded in the
+trace for replaying. However, we don't actually know how much data the
+kernel will write. Instead, we take a conservative estimate which is
+guaranteed to be at least that size, and record that amount of memory.
+
+However, that range might cross a memory mapping, and during replay,
+part of that range might not be mapped. Currently that raises an
+assertion error because the write is smaller than the read.
+
+In this patch, we record whether a memory "write" is actually this kind
+of conservative capture, and mark it as such in the trace. During
+replay, we then do not fail that assertion.
+---
+ src/RecordSession.cc |  2 +-
+ src/RecordTask.cc    |  8 ++++----
+ src/RecordTask.h     |  5 +++--
+ src/ReplayTask.cc    | 10 ++++++++--
+ src/Task.cc          |  8 ++------
+ src/Task.h           |  2 +-
+ src/TraceStream.cc   |  9 ++++++---
+ src/TraceStream.h    | 11 ++++++++---
+ src/rr_trace.capnp   |  4 ++++
+ 9 files changed, 37 insertions(+), 22 deletions(-)
+
+diff --git a/src/RecordSession.cc b/src/RecordSession.cc
+index 146d2091..8a952cd7 100644
+--- a/src/RecordSession.cc
++++ b/src/RecordSession.cc
+@@ -1758,7 +1758,7 @@ bool RecordSession::signal_state_changed(RecordTask* t, StepState* step_state) {
+       // We record this data even if sigframe_size is zero to simplify replay.
+       // Stop recording data if we run off the end of a writable mapping.
+       // Our sigframe size is conservative so we need to do this.
+-      t->record_remote_writable(t->regs().sp(), sigframe_size);
++      t->record_remote_writable(t->regs().sp(), sigframe_size, true);
+ 
+       // This event is used by the replayer to set up the signal handler frame.
+       // But if we don't have a handler, we don't want to record the event
+diff --git a/src/RecordTask.cc b/src/RecordTask.cc
+index 06f2a0c4..cd3f0555 100644
+--- a/src/RecordTask.cc
++++ b/src/RecordTask.cc
+@@ -1724,7 +1724,7 @@ bool RecordTask::record_remote_by_local_map(remote_ptr<void> addr,
+   return false;
+ }
+ 
+-void RecordTask::record_remote(remote_ptr<void> addr, ssize_t num_bytes) {
++void RecordTask::record_remote(remote_ptr<void> addr, ssize_t num_bytes, bool sizeIsConservative) {
+   ASSERT(this, num_bytes >= 0);
+ 
+   if (!addr) {
+@@ -1750,11 +1750,11 @@ void RecordTask::record_remote(remote_ptr<void> addr, ssize_t num_bytes) {
+     ASSERT(this, false) << "Should have recorded " << num_bytes << " bytes from "
+                         << addr << ", but failed";
+   }
+-  trace_writer().write_raw(rec_tid, buf.data(), num_bytes, addr);
++  trace_writer().write_raw(rec_tid, buf.data(), num_bytes, addr, sizeIsConservative);
+ }
+ 
+ void RecordTask::record_remote_writable(remote_ptr<void> addr,
+-                                        ssize_t num_bytes) {
++                                        ssize_t num_bytes, bool sizeIsConservative) {
+   ASSERT(this, num_bytes >= 0);
+ 
+   remote_ptr<void> p = addr;
+@@ -1777,7 +1777,7 @@ void RecordTask::record_remote_writable(remote_ptr<void> addr,
+   }
+   num_bytes = min(num_bytes, p - addr);
+ 
+-  record_remote(addr, num_bytes);
++  record_remote(addr, num_bytes, sizeIsConservative);
+ }
+ 
+ ssize_t RecordTask::record_remote_fallible(remote_ptr<void> addr,
+diff --git a/src/RecordTask.h b/src/RecordTask.h
+index 7f42e678..77db655b 100644
+--- a/src/RecordTask.h
++++ b/src/RecordTask.h
+@@ -400,7 +400,7 @@ public:
+   void record_local(remote_ptr<T> addr, const T* buf, size_t count = 1) {
+     record_local(addr, sizeof(T) * count, buf);
+   }
+-  void record_remote(remote_ptr<void> addr, ssize_t num_bytes);
++  void record_remote(remote_ptr<void> addr, ssize_t num_bytes, bool sizeIsConservative = false);
+   template <typename T> void record_remote(remote_ptr<T> addr) {
+     record_remote(addr, sizeof(T));
+   }
+@@ -417,7 +417,8 @@ public:
+   // Record as much as we can of the bytes in this range. Will record only
+   // contiguous mapped-writable data starting at `addr`. rr mappings (e.g. syscallbuf)
+   // are treated as non-contiguous with any other mapping.
+-  void record_remote_writable(remote_ptr<void> addr, ssize_t num_bytes);
++  void record_remote_writable(remote_ptr<void> addr, ssize_t num_bytes,
++                              bool sizeIsConservative = false);
+ 
+   // Simple helper that attempts to use the local mapping to record if one
+   // exists
+diff --git a/src/ReplayTask.cc b/src/ReplayTask.cc
+index b6fb569f..f7cc3de3 100644
+--- a/src/ReplayTask.cc
++++ b/src/ReplayTask.cc
+@@ -157,8 +157,14 @@ static size_t write_data_with_holes(ReplayTask* t,
+     if (holes_iter != buf.holes.end()) {
+       data_end = data_offset + holes_iter->offset - addr_offset;
+     }
+-    t->write_bytes_helper(buf.addr + addr_offset, data_end - data_offset, buf.data.data() + data_offset,
+-                          nullptr);
++    bool ok = true;
++    ssize_t nwritten = t->write_bytes_helper(buf.addr + addr_offset, data_end - data_offset,
++                                             buf.data.data() + data_offset,&ok);
++
++    ASSERT(t, ok || buf.sizeIsConservative)
++        << "Should have written " << buf.data.size() << " bytes to " << (buf.addr + addr_offset)
++        << ", but only wrote " << nwritten;
++
+     addr_offset += data_end - data_offset;
+     data_offset = data_end;
+   }
+diff --git a/src/Task.cc b/src/Task.cc
+index 407e422e..ab457faa 100644
+--- a/src/Task.cc
++++ b/src/Task.cc
+@@ -3213,17 +3213,13 @@ static ssize_t safe_pwrite64(Task* t, const void* buf, ssize_t buf_size,
+   return nwritten;
+ }
+ 
+-void Task::write_bytes_helper(remote_ptr<void> addr, ssize_t buf_size,
++ssize_t Task::write_bytes_helper(remote_ptr<void> addr, ssize_t buf_size,
+                               const void* buf, bool* ok, uint32_t flags) {
+-  ASSERT(this, buf_size >= 0) << "Invalid buf_size " << buf_size;
+-  if (0 == buf_size) {
+-    return;
+-  }
+-
+   ssize_t nwritten = write_bytes_helper_no_notifications(addr, buf_size, buf, ok, flags);
+   if (nwritten > 0) {
+     vm()->notify_written(addr, nwritten, flags);
+   }
++  return nwritten;
+ }
+ 
+ ssize_t Task::write_bytes_helper_no_notifications(remote_ptr<void> addr, ssize_t buf_size,
+diff --git a/src/Task.h b/src/Task.h
+index 58316aae..0adf7cce 100644
+--- a/src/Task.h
++++ b/src/Task.h
+@@ -816,7 +816,7 @@ public:
+   /**
+    * |flags| is bits from WriteFlags.
+    */
+-  void write_bytes_helper(remote_ptr<void> addr, ssize_t buf_size,
++  ssize_t write_bytes_helper(remote_ptr<void> addr, ssize_t buf_size,
+                           const void* buf, bool* ok = nullptr,
+                           uint32_t flags = 0);
+   /**
+diff --git a/src/TraceStream.cc b/src/TraceStream.cc
+index ed312b7b..66e3ec52 100644
+--- a/src/TraceStream.cc
++++ b/src/TraceStream.cc
+@@ -573,7 +573,7 @@ TraceFrame TraceReader::read_frame(FrameTime skip_before) {
+       const auto& hole = holes[j];
+       h[j] = { hole.getOffset(), hole.getSize() };
+     }
+-    raw_recs[i] = { w.getAddr(), (size_t)w.getSize(), i32_to_tid(w.getTid()), h };
++    raw_recs[i] = { w.getAddr(), (size_t)w.getSize(), i32_to_tid(w.getTid()), h, w.getSizeIsConservative()};
+   }
+ 
+   if (ret.global_time < skip_before) {
+@@ -1237,8 +1237,9 @@ KernelMapping TraceReader::read_mapped_region(MappedData* data, bool* found,
+ 
+ void TraceWriter::write_raw_header(pid_t rec_tid, size_t total_len,
+                                    remote_ptr<void> addr,
+-                                   const std::vector<WriteHole>& holes = std::vector<WriteHole>()) {
+-  raw_recs.push_back({ addr, total_len, rec_tid, holes });
++                                   const std::vector<WriteHole>& holes,
++                                   bool sizeIsConservative) {
++  raw_recs.push_back({ addr, total_len, rec_tid, holes, sizeIsConservative});
+ }
+ 
+ void TraceWriter::write_raw_data(const void* d, size_t len) {
+@@ -1253,6 +1254,7 @@ bool TraceReader::read_raw_data_for_frame(RawData& d) {
+   auto& rec = raw_recs[raw_recs.size() - 1];
+   d.rec_tid = rec.rec_tid;
+   d.addr = rec.addr;
++  d.sizeIsConservative = rec.sizeIsConservative;
+ 
+   d.data.resize(rec.size);
+   auto hole_iter = rec.holes.begin();
+@@ -1285,6 +1287,7 @@ bool TraceReader::read_raw_data_for_frame_with_holes(RawDataWithHoles& d) {
+   d.addr = rec.addr;
+   d.holes = std::move(rec.holes);
+   size_t data_size = rec.size;
++  d.sizeIsConservative = rec.sizeIsConservative;
+   for (auto& h : d.holes) {
+     data_size -= h.size;
+   }
+diff --git a/src/TraceStream.h b/src/TraceStream.h
+index f7a03066..3e704cdc 100644
+--- a/src/TraceStream.h
++++ b/src/TraceStream.h
+@@ -56,6 +56,7 @@ public:
+     size_t size;
+     pid_t rec_tid;
+     std::vector<WriteHole> holes;
++    bool sizeIsConservative;
+   };
+ 
+   /**
+@@ -224,13 +225,15 @@ public:
+    * 'addr' is the address in the tracee where the data came from/will be
+    * restored to.
+    */
+-  void write_raw(pid_t tid, const void* data, size_t len, remote_ptr<void> addr) {
++  void write_raw(pid_t tid, const void* data, size_t len, remote_ptr<void> addr,
++                 bool sizeIsConservative = false) {
+     write_raw_data(data, len);
+-    write_raw_header(tid, len, addr, std::vector<WriteHole>());
++    write_raw_header(tid, len, addr, std::vector<WriteHole>(), sizeIsConservative);
+   }
+   void write_raw_data(const void* data, size_t len);
+   void write_raw_header(pid_t tid, size_t total_len, remote_ptr<void> addr,
+-                        const std::vector<WriteHole>& holes);
++                        const std::vector<WriteHole>& holes,
++                        bool sizeIsConservative = false);
+ 
+   /**
+    * Write a task event (clone or exec record) to the trace.
+@@ -344,6 +347,7 @@ public:
+     std::vector<uint8_t> data;
+     remote_ptr<void> addr;
+     pid_t rec_tid;
++    bool sizeIsConservative;
+   };
+ 
+   /**
+@@ -354,6 +358,7 @@ public:
+     remote_ptr<void> addr;
+     pid_t rec_tid;
+     std::vector<WriteHole> holes;
++    bool sizeIsConservative;
+   };
+ 
+   /**
+diff --git a/src/rr_trace.capnp b/src/rr_trace.capnp
+index a575f2f4..f87014e2 100644
+--- a/src/rr_trace.capnp
++++ b/src/rr_trace.capnp
+@@ -244,6 +244,10 @@ struct MemWrite {
+   # A list of regions where zeroes are written. These are not
+   # present in the compressed data.
+   holes @3 :List(WriteHole);
++  # This is set for writes where we don't actually know that the write
++  # will apply in full in the replayee (e.g. for conservative sigframe
++  # captures when handling EV_SIGNAL).
++  sizeIsConservative @4 :Bool;
+ }
+ 
+ enum Arch {
+-- 
+2.46.0
+
