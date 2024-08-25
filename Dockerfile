@@ -160,7 +160,7 @@ RUN <<BASHSCRIPT
   rm -Rf yaml-$LIBYAM_VERSION
 BASHSCRIPT
 
-COPY rr-sigframe-conservative.patch
+COPY rr-sigframe-conservative.patch .
 RUN <<BASHSCRIPT
   set -ex
 

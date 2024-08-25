@@ -12,6 +12,7 @@ require 'securerandom'
 require 'timeout'
 require 'fiddle'
 
+$stdout.sync = true
 CONFIGURE_FLAGS = %w[--disable-install-doc --enable-yjit]
 OPTFLAGS=%w[-O3]
 DEBUGFLAGS=%w[-ggdb3 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer]
@@ -204,6 +205,7 @@ def _run_test(opts, testtask, test_file)
     "SHOWFLAGS=",
     testtask
   ]
+  test_env = {}
 
   trace_dir = File.join(test_output_dir, 'rr_trace')
   cgroup = nil
@@ -243,11 +245,12 @@ def _run_test(opts, testtask, test_file)
       '--disable-cpuid-features', '0x80050440,0x40140400',
       '--disable-cpuid-features-ext', '0xc405814,0xe73fa021,0x3eff8ef',
       '--disable-cpuid-features-xsave', '0xfffffff0',
+      # Temp logging
+      '--log=all:debug'
       '--'
     ] + test_cmdline
   end
 
-  test_env = {}
   if opts[:asan]
     # ASAN tests are slow!
     test_env['RUBY_TEST_TIMEOUT_SCALE'] = '5'
