@@ -246,7 +246,7 @@ def _run_test(opts, testtask, test_file)
       '--disable-cpuid-features-ext', '0xc405814,0xe73fa021,0x3eff8ef',
       '--disable-cpuid-features-xsave', '0xfffffff0',
       # Temp logging
-      '--log=all:debug'
+      '--log=all:debug',
       '--'
     ] + test_cmdline
   end
