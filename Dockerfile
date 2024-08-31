@@ -160,7 +160,6 @@ RUN <<BASHSCRIPT
   rm -Rf yaml-$LIBYAM_VERSION
 BASHSCRIPT
 
-COPY rr-sigframe-conservative.patch .
 RUN <<BASHSCRIPT
   set -ex
 
@@ -175,17 +174,13 @@ RUN <<BASHSCRIPT
   #   4. https://github.com/rr-debugger/rr/issues/3779: Ruby's extensive use of vfork shakes
   #      out a bug in signal stack handling during syscalls
   #
-  # Issue no. 1 is a problem in the spec file Fedora is using to build rr. Issue 2 and 3 have
-  # patches merged upstream that are not yet in Fedora, and issue 4 has a patch but it's not
-  # merged upstream yet.
+  # Issue no. 1 is a problem in the spec file Fedora is using to build rr. Issues 2, 3, and 4 have
+  # patches merged upstream that are not yet in Fedora
   #
   # So, compile our own RR from the (as of now) latest master.
 
   git clone --depth=1 https://github.com/rr-debugger/rr.git
   cd rr
-
-  # This will start failing when the fix is merged upstream.
-  git am ~/rr-sigframe-conservative.patch
 
   mkdir build
   cd build
