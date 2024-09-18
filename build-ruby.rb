@@ -267,7 +267,7 @@ def _run_test(opts, testtask, test_file)
     sh_with_timeout!(
       test_env, *test_cmdline,
       timeout: opts[:test_timeout], on_timeout: on_rr_timeout,
-      unset_others: true
+      unsetenv_others: true
     )
   rescue => e
     puts "=> Test #{test_file} FAIL: #{e}"
