@@ -163,7 +163,7 @@ BASHSCRIPT
 RUN <<BASHSCRIPT
   set -ex
 
-  # There are at least four problems with `rr` as packaged in Fedora today:
+  # There are at least five problems with `rr` as packaged in Fedora today:
   #
   #   1. https://github.com/rr-debugger/rr/issues/3364: the way that debug symbols are stripped
   #      mutilates librrpage.so
@@ -173,8 +173,10 @@ RUN <<BASHSCRIPT
   #      in a way it's not expecting and break it
   #   4. https://github.com/rr-debugger/rr/issues/3779: Ruby's extensive use of vfork shakes
   #      out a bug in signal stack handling during syscalls
+  #   5. https://github.com/rr-debugger/rr/issues/3807: vfork again shakes out a nasty deadlock
+  #      when rr tries to unmap the exec'd processes address space.
   #
-  # Issue no. 1 is a problem in the spec file Fedora is using to build rr. Issues 2, 3, and 4 have
+  # Issue no. 1 is a problem in the spec file Fedora is using to build rr. Issues 2, 3, 4, and 5 have
   # patches merged upstream that are not yet in Fedora
   #
   # So, compile our own RR from the (as of now) latest master.
