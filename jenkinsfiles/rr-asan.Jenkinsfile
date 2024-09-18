@@ -11,6 +11,11 @@ pipeline {
   // Explicitly specify a node, we're depending on the same podman container image being
   // available each time.
   agent any
+  environment {
+    PERNOSCO_USER = 'kj@kjtsanaktsidis.id.au'
+    PERNOSCO_GROUP = 'github1418177'
+    PERNOSCO_USER_SECRET_KEY = credentials('PERNOSCO_USER_SECRET_KEY')
+  }
   parameters {
     string(
       name: 'RUBY_COMMIT',
@@ -80,7 +85,7 @@ pipeline {
             --env "BUILD_UID=$(id -u)" \
             --env "BUILD_GID=$(id -u)" \
             "$(cat image.txt)" \
-            ../build-ruby.rb --btest --rr --asan
+            ../build-ruby.rb --btest --rr --asan --pernosco
         '''
         sh label: 'make test-tool', script: '''
           podman run --rm \
@@ -95,7 +100,7 @@ pipeline {
             --env "BUILD_UID=$(id -u)" \
             --env "BUILD_GID=$(id -u)" \
             "$(cat image.txt)" \
-            ../build-ruby.rb --test-tool --rr --asan
+            ../build-ruby.rb --test-tool --rr --asan --pernosco
         '''
         sh label: 'make test-all', script: '''
           podman run --rm \
@@ -110,7 +115,7 @@ pipeline {
             --env "BUILD_UID=$(id -u)" \
             --env "BUILD_GID=$(id -u)" \
             "$(cat image.txt)" \
-            ../build-ruby.rb --test-all --rr --asan
+            ../build-ruby.rb --test-all --rr --asan --pernosco
         '''
       }
     }

@@ -22,6 +22,10 @@ LDFLAGS=%w[]
 TESTS_WITHOUT_SYSCALLBUF = [
   'test/ruby/test_require.rb'
 ].freeze
+ALLOWED_ENV_VARS = %w[
+  LANG PATH USER LOGNAME HOME SHELL INVOCATION_ID TERM XDG_SESSION_ID XDG_RUNTIME_DIR
+  XDG_SESSION_TYPE XDG_SESSION_CLASS DBUS_SESSION_BUS_ADDRESS
+].freeze
 
 include FileUtils::Verbose
 @fileutils_label = "==> "
@@ -192,6 +196,10 @@ def _run_test(opts, testtask, test_file)
   rm_rf test_output_dir
   mkdir_p test_output_dir
 
+  # We need to run with a _whitelist_ of environment variables, so a ton of jenkins stuff
+  # (including credentials :/) don't leak into the recording.
+  test_env = ENV.slice(*ALLOWED_ENV_VARS)
+
   testopts = [
     '-v','--tty=no',
     "--junit-filename=#{junit_xml_file}",
@@ -205,7 +213,7 @@ def _run_test(opts, testtask, test_file)
     "SHOWFLAGS=",
     testtask
   ]
-  test_env = {}
+
 
   trace_dir = File.join(test_output_dir, 'rr_trace')
   cgroup = nil
@@ -256,7 +264,11 @@ def _run_test(opts, testtask, test_file)
   end
 
   begin
-    sh_with_timeout!(test_env, *test_cmdline, timeout: opts[:test_timeout], on_timeout: on_rr_timeout)
+    sh_with_timeout!(
+      test_env, *test_cmdline,
+      timeout: opts[:test_timeout], on_timeout: on_rr_timeout,
+      unset_others: true
+    )
   rescue => e
     puts "=> Test #{test_file} FAIL: #{e}"
     result = false
@@ -283,6 +295,16 @@ def _run_test(opts, testtask, test_file)
         puts "==> Attaching trace to test failed"
         puts innerex.inspect
         puts innerex.backtrace.join("\n")
+      end
+      if opts[:pernosco]
+        pernosco_file = File.join(test_output_dir, 'pernosco.zstd')
+        sh! 'prenosco-submit', 'upload',
+          '--dry-run', pernosco_file,
+          '--consent-to-current-privacy-policy',
+          '--build-dir', File.realpath('.'),
+          '--copy-sources', File.realpath('..'),
+          trace_dir, File.realpath('..')
+        _attach_trace_to_test junit_xml_file, pernosco_file
       end
     end
   else

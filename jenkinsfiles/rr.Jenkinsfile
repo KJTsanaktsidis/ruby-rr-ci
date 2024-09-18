@@ -11,6 +11,11 @@ pipeline {
   // Explicitly specify a node, we're depending on the same podman container image being
   // available each time.
   agent any
+  environment {
+    PERNOSCO_USER = 'kj@kjtsanaktsidis.id.au'
+    PERNOSCO_GROUP = 'github1418177'
+    PERNOSCO_USER_SECRET_KEY = credentials('PERNOSCO_USER_SECRET_KEY')
+  }
   parameters {
     string(
       name: 'RUBY_COMMIT',
