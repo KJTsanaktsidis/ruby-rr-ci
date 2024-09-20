@@ -417,9 +417,9 @@ OptionParser.new do |opts|
   end
   opts.on('--rr', 'Run tests under rr') do
     options[:rr] = true
-    if system 'command', '-v', 'pernosco-submit'
-      options[:pernosco] = true
-    end
+  end
+  opts.on('--pernosco', 'Produce a pernosco archive of failed tests') do
+    options[:pernosco] = true
   end
   opts.on('--chaos', 'Run tests under rr chaos mode') do
     options[:chaos] = true
