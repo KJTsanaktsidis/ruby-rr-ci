@@ -298,7 +298,7 @@ def _run_test(opts, testtask, test_file)
       end
       if opts[:pernosco]
         pernosco_file = File.join(test_output_dir, 'pernosco.zstd')
-        sh! 'prenosco-submit', 'upload',
+        sh! 'pernosco-submit', 'upload',
           '--dry-run', pernosco_file,
           '--consent-to-current-privacy-policy',
           '--build-dir', File.realpath('.'),
