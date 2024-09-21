@@ -146,9 +146,14 @@ def do_build(opts)
   end
 end
 
-def _attach_trace_to_test(junit_xml_file, trace_archive_file)
-  junit_doc = File.open(junit_xml_file, 'r') do |f|
-    REXML::Document.new f
+def _attach_trace_to_test(junit_xml_file, attach_files)
+  junit_doc = begin
+    File.open(junit_xml_file, 'r') do |f|
+      REXML::Document.new f
+    end
+  rescue Errno::ENOENT
+    puts "=> Not attaching to #{junit_xml_file} because it does not exist"
+    return
   end
   output_els = []
 
@@ -173,7 +178,13 @@ def _attach_trace_to_test(junit_xml_file, trace_archive_file)
     #     maps the workspace directory to the same path on the host and container, so this works.
     #   - Important that each stderr is unique, otherwise the jenkins test reporting machinery coalesces
     #     them together. So add the xpath of the element to it.
-    el.add_text "\n\n--- RR TRACE ---\n#{el.xpath}\n[[ATTACHMENT|#{File.absolute_path trace_archive_file}]]\n"
+    attach_files.each do |attach_file|
+      if File.exist?(attach_file)
+        el.add_text "\n\n--- ATTACHMENT #{attach_file} ---\n#{el.xpath}\n[[ATTACHMENT|#{File.absolute_path attach_file}]]\n"
+      else
+        puts "=> Not attaching #{attach_file} to junit xml because it does not exist"
+      end
+    end
   end
   File.open(junit_xml_file, 'w') do |f|
     junit_doc.write(output: f)
@@ -289,13 +300,7 @@ def _run_test(opts, testtask, test_file)
       trace_archive_file = File.join(test_output_dir, 'rr_trace.tar.gz')
       sh! 'tar', '-cz', '-f', trace_archive_file, '-C', test_output_dir, 'rr_trace'
       # Attach it to the test output using the JUnit Attachments convention
-      begin
-        _attach_trace_to_test junit_xml_file, trace_archive_file
-      rescue => innerex
-        puts "==> Attaching trace to test failed"
-        puts innerex.inspect
-        puts innerex.backtrace.join("\n")
-      end
+      attach_files = [trace_archive_file]
       if opts[:pernosco]
         pernosco_file = File.join(test_output_dir, 'pernosco.zstd')
         sh! 'pernosco-submit', 'upload',
@@ -304,8 +309,10 @@ def _run_test(opts, testtask, test_file)
           '--build-dir', File.realpath('.'),
           '--copy-sources', File.realpath('..'),
           trace_dir, File.realpath('..')
-        _attach_trace_to_test junit_xml_file, pernosco_file
+        attach_files << pernosco_file
       end
+
+      _attach_trace_to_test junit_xml_file, attach_files
     end
   else
     puts "=> Test #{test_file} PASS"
