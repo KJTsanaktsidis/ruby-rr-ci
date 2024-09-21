@@ -65,6 +65,9 @@ pipeline {
             --user "0:0" \
             --env "BUILD_UID=$(id -u)" \
             --env "BUILD_GID=$(id -u)" \
+            --env PERNOSCO_USER \
+            --env PERNOSCO_GROUP \
+            --env PERNOSCO_USER_SECRET_KEY \
             "$(cat image.txt)" \
             ../build-ruby.rb --build --asan
         '''
@@ -84,6 +87,9 @@ pipeline {
             --user "0:0" \
             --env "BUILD_UID=$(id -u)" \
             --env "BUILD_GID=$(id -u)" \
+            --env PERNOSCO_USER \
+            --env PERNOSCO_GROUP \
+            --env PERNOSCO_USER_SECRET_KEY \
             "$(cat image.txt)" \
             ../build-ruby.rb --btest --rr --asan --pernosco
         '''
@@ -99,6 +105,9 @@ pipeline {
             --user "0:0" \
             --env "BUILD_UID=$(id -u)" \
             --env "BUILD_GID=$(id -u)" \
+            --env PERNOSCO_USER \
+            --env PERNOSCO_GROUP \
+            --env PERNOSCO_USER_SECRET_KEY \
             "$(cat image.txt)" \
             ../build-ruby.rb --test-tool --rr --asan --pernosco
         '''
@@ -114,6 +123,9 @@ pipeline {
             --user "0:0" \
             --env "BUILD_UID=$(id -u)" \
             --env "BUILD_GID=$(id -u)" \
+            --env PERNOSCO_USER \
+            --env PERNOSCO_GROUP \
+            --env PERNOSCO_USER_SECRET_KEY \
             "$(cat image.txt)" \
             ../build-ruby.rb --test-all --rr --asan --pernosco
         '''
