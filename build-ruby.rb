@@ -1,16 +1,22 @@
 #!/usr/bin/env ruby
 
-require 'optparse'
-require 'fileutils'
-require 'tmpdir'
-require 'shellwords'
-require 'open3'
-require 'pathname'
-require 'rexml'
-require 'erb'
-require 'securerandom'
-require 'timeout'
-require 'fiddle'
+require 'bundler/inline'
+gemfile do
+  source 'https://rubygems.org'
+
+  gem 'erb', '~> 4'
+  gem 'fileutils', '~> 1'
+  gem 'open3', '~> 0.2'
+  gem 'optparse', '~> 0.5'
+  gem 'pathname', '~> 0.3'
+  gem 'rexml', '~> 3'
+  gem 'securerandom', '~> 0.3'
+  gem 'shellwords', '~> 0.2'
+  gem 'timeout', '~> 0.4'
+  gem 'tmpdir', '~> 0.2'
+
+  gem 'ffi', '~> 1'
+end
 
 $stdout.sync = true
 CONFIGURE_FLAGS = %w[--disable-install-doc --enable-yjit]
@@ -30,20 +36,6 @@ ALLOWED_ENV_VARS = %w[
 include FileUtils::Verbose
 @fileutils_label = "==> "
 
-FIDDLE_LIBC = Fiddle.dlopen(nil)
-FIDDLE_PIDFD_OPEN_BINDING = Fiddle::Function.new(
-  FIDDLE_LIBC['pidfd_open'],
-  [Fiddle::TYPE_INT, Fiddle::TYPE_UINT], # input: pid_t pid, unsigned int flags
-  Fiddle::TYPE_INT # output: int fd
-)
-
-PIDFD_NONBLOCK = 04000
-def pidfd_open(pid, flags = 0)
-  raw_fd = FIDDLE_PIDFD_OPEN_BINDING.call(pid, flags)
-  raise "pidfd_open failed: #{raw_fd}" if raw_fd < 0
-  IO.for_fd(raw_fd)
-end
-
 def sh_get_command_string(*args)
   cmd = args
   env = {}
@@ -55,41 +47,10 @@ def sh_get_command_string(*args)
   [(env.any? ? env_str : nil), cmd_str].compact.join(' ')
 end
 
-
 def sh!(*args, **kwargs)
   fu_output_message sh_get_command_string(*args)
   system(*args, **kwargs, exception: true) 
   $!
-end
-
-def sh_with_timeout!(*args, timeout: nil, on_timeout: nil, **kwargs)
-  return sh!(*args, **kwargs) unless timeout && on_timeout
-
-  cmdname = sh_get_command_string(*args)
-  fu_output_message cmdname
-  pid = Process.spawn(*args, **kwargs)
-  pidfd = pidfd_open(pid, PIDFD_NONBLOCK)
-
-  # Wait for the process to be finished, or for the timeout.
-  deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
-  loop do
-    now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    wait_for = 0
-    if deadline && now >= deadline
-      puts "=> Command #{cmdname} timeout #{timeout} seconds exceeded."
-      on_timeout.call(pid)
-      deadline = nil
-    elsif deadline
-      wait_for = deadline - now
-    end
-    readable, _, _ = IO.select([pidfd], [], [], wait_for)
-    break if readable&.include?(pidfd)
-  end
-  _, status = Process.waitpid2(pid)
-  raise "Command #{cmdname} failed: #{status.inspect}" unless status.success?
-  status
-ensure
-  pidfd&.close
 end
 
 def sh(*args, **kwargs)
@@ -103,6 +64,231 @@ def sh_capture!(*args, **kwargs)
   output, status = Open3.capture2(*args, **kwargs)
   raise "Process exited with #{status.inspect}" unless status.success?
   output
+end
+
+module Libc
+  extend FFI::Library
+  ffi_lib 'c'
+
+  class Timespec < FFI::Struct
+    layout :tv_sec, :time_t,
+           :tv_nsec, :long_long
+  end
+
+  class ITimerSpec < FFI::Struct
+    layout :it_interval, Timespec,
+           :it_value, Timespec
+  end
+
+  CLOCK_MONOTONIC = 1
+  O_NONBLOCK = 04000
+  O_CLOEXEC = 02000000
+  TFD_NONBLOCK = O_NONBLOCK
+  TFD_CLOEXEC = O_CLOEXEC
+  PIDFD_NONBLOCK = O_NONBLOCK
+
+  # int pidfd_open(pid_t pid, unsigned int flags)
+  attach_function :pidfd_open, [:pid_t, :uint], :int
+  # int timerfd_create(int clockid, int flags)
+  attach_function :timerfd_create, [:int, :int], :int
+  # int timerfd_settime(int fd, int flags, const struct itimerspec *new_value,
+  #                     struct itimrespec *old_value)
+  attach_function :timerfd_settime,
+                  [:int, :int, ITimerSpec.by_ref, ITimerSpec.by_ref],
+                  :int
+end
+
+class RecordedCommandExecutor
+  def initialize(recorder_cmdline:, test_cmdline:, env:, timeout:, cgroup_base:)
+    @recorder_cmdline = recorder_cmdline
+    @test_cmdline = test_cmdline
+    @env = env
+    @timeout = timeout
+    @cgroup_base = cgroup_base
+    @process_output = nil
+    @pid = nil
+    @status = nil
+
+    # Make a new cgroup to run this command in.
+    @cgroup = File.join(@cgroup_base, SecureRandom.hex)
+    Dir.mkdir(File.join('/sys/fs/cgroup', @cgroup))
+    # Make the _test command_ run in this cgroup, but _not_ rr, by wrapping it in a call
+    # to cgexec(8). That means we'll be able to kill the test on timeout, and then have rr
+    # itself gracefully finish writing the trace, so the hang can be debugged.
+    @full_cmdline = [*@recorder_cmdline, 'cgexec', '-g', ":#{@cgroup}", *@test_cmdline]
+  end
+
+  def cmdname = sh_get_command_string(@env, *@full_cmdline)
+  def process_output = @process_output
+  def pid = @pid
+  def status = @status
+
+  def run
+    raise ArgumentError, "can only run once" if @pidfd
+
+    # We want combined stdout/stderr
+    @pipe_r, pipe_w = IO.pipe
+    @pid = Process.spawn(
+      @env, *@full_cmdline,
+      unsetenv_others: true, close_others: true,
+      in: File::NULL, out: pipe_w, err: pipe_w
+    )
+    pipe_w.close
+    @process_output = +""
+    @pidfd = pidfd_for_pid(@pid)
+    @timeout_timerfd = make_timerfd
+    arm_timerfd(@timeout_timerfd, @timeout, interval: false)
+    @cgpid_poll_timerfd = make_timerfd # Will be armed later
+    pidfd_exited = false
+    hard_kill_deadline = nil
+
+    ios = [@pidfd, @timeout_timerfd, @cgpid_poll_timerfd, @pipe_r]
+    loop do
+      # We want to stop this loop when both stdout is drained and
+      # the cgroup we were monitoring is empty
+      break if @pipe_r.closed? && pidfd_exited && cgroup_pids.empty?
+      readable, _, _ = IO.select(ios)
+
+      if readable.include?(@pipe_r)
+        data = @pipe_r.read_nonblock(4096, exception: false)
+        case data
+        when nil
+          # EOF.
+          ios.delete @pipe_r
+          @pipe_r.close
+        when :wait_readable
+          # Loop again
+        else
+          @process_output << data
+          print_process_output data
+        end
+      end
+
+      if readable.include?(@pidfd)
+        # This means the processes has exited. We will delay actually
+        # reaping the child until we've drained the stdout/err though,
+        # because the timeout could still fire and kill some child processes.
+        ios.delete @pidfd
+        pidfd_exited = true
+
+        # But we should kill the cgroup if this happens to make sure there are no orphans.
+        # We don't _expect_ this to catch anything, because rr should clean up after itself.
+        kill_cgroup
+
+        # And because we did that, we should disable the timeout and put the every-second timer
+        # into ios to have it keep checking if cgroup_pids.empty? above
+        arm_timerfd(@cgpid_poll_timerfd, 0.5, interval: true)
+      end
+
+      if readable.include?(@timeout_timerfd)
+        # Read the timer so it stops firing.
+        @timeout_timerfd.read_nonblock(8)
+
+        # Send SIGABRT to everybod to hopefully get a nice clean Ruby stack trace of anything
+        # still open. This does _not_ kill rr, which should then hopefully cleanly exit with
+        # a complete trace
+        pids = cgroup_pids
+        log "Sending SIGABRT to #{pids.inspect} from #{@cgroup}"
+        pids.each { Process.kill :SIGABRT, _1 rescue nil }
+
+        # Now get ready to potentially kill it much harder if things didn't exit.
+        arm_timerfd(@cgpid_poll_timerfd, 0.5, interval: true)
+        hard_kill_deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10
+      end
+
+      if readable.include?(@cgpid_poll_timerfd)
+        @cgpid_poll_timerfd.read_nonblock(8)
+
+        # The main purpose of this timer is actually to re-check the cgroup_pids.empty?
+        # condition above. But the second purpose is to decide to hard-kill if the timeout
+        # expired.
+        if hard_kill_deadline && hard_kill_deadline > Process.clock_gettime(Process::CLOCK_MONOTONIC)
+          # Need to check again because the pids might have exited while we were blocked in IO.select
+          pids = cgroup_pids
+          if pids.any?
+            log "Gave up waiting after 10 seconds (#{pids.size} pid(s) remain). Killing cgroup #{@cgroup}."
+            kill_cgroup
+          end
+          hard_kill_deadline = nil
+        end
+      end
+    end
+
+    # Now we're in a position to actually reap the child.
+    # It would be nice to do this with waitid(2) P_PIDFD to wait on the pidfd itself,
+    # but it's basically impossible to map siginfo_t into Ruby with FFI, and it's not
+    # actually racy to use the pid here since we know we're the parent.
+    _, @status = Process.waitpid2(@pid)
+  ensure
+    close
+  end
+
+  private
+
+  def close
+    # unconditionally delete everything in the cgroup.
+    kill_cgroup
+    sleep 0.5 until cgroup_pids.empty?
+    Dir.rmdir File.join("/sys/fs/cgroup", @cgroup)
+
+    # If we hadn't reaped our process, do that.
+    if !@status && @pid
+      Process.kill :SIGKILL, @pid rescue nil
+      _, @status = Process.waitpid2(@pid)
+    end
+
+    # Close all our FDs
+    @pidfd&.close
+    @pipe_r&.close
+    @timeout_timerfd&.close
+    @cgpid_poll_timerfd&.close
+  end
+
+  def pidfd_for_pid(pid)
+    fd = Libc.pidfd_open(pid, Libc::PIDFD_NONBLOCK)
+    raise "pidfd_open errno #{FFI.errno} pid #{pid}" if fd == -1
+    IO.for_fd(fd)
+  end
+
+  def make_timerfd
+    IO.for_fd(Libc.timerfd_create(
+      Libc::CLOCK_MONOTONIC, Libc::TFD_NONBLOCK | Libc::TFD_CLOEXEC
+    ))
+  end
+
+  def arm_timerfd(timerfd, timeout, interval: false)
+    seconds = timeout.floor
+    nanosecs = ((timeout - timeout.floor) * 1_000_000_000).round
+    timespec = Libc::Timespec.new.tap do |t|
+      t[:tv_sec] = seconds
+      t[:tv_nsec] = nanosecs
+    end
+    itimerspec = Libc::ITimerSpec.new
+    if interval
+      itimerspec[:it_value] = timespec
+    else
+      itimerspec[:it_interval] = timespec
+    end
+    ret = Libc.timerfd_settime(timerfd.fileno, 0, itimerspec, nil)
+    raise "timerfd_settime failed" unless ret == 0
+    timerfd
+  end
+
+  def cgroup_pids
+    File.read(File.join("/sys/fs/cgroup", @cgroup, "cgroup.procs")).lines.map { _1.strip.to_i }
+  end
+
+  def kill_cgroup
+    File.write('1', File.join("/sys/fs/cgroup", @cgroup, "cgroup.kill"))
+  end
+
+  def log(message)
+    puts "=> #{message}"
+  end
+
+  def print_process_output(text)
+    $stdout.write(text)
+  end
 end
 
 def do_build(opts)
@@ -225,32 +411,11 @@ def _run_test(opts, testtask, test_file)
     testtask
   ]
 
-
   trace_dir = File.join(test_output_dir, 'rr_trace')
   cgroup = nil
   on_rr_timeout = nil
-  if opts[:cgroup_base]
-    cgroup = File.join(opts[:cgroup_base], SecureRandom.hex)
-    Dir.mkdir(File.join('/sys/fs/cgroup', cgroup))
-    test_cmdline = ['cgexec', '-g', ":#{cgroup}"] + test_cmdline
-    on_rr_timeout = ->(pid) do
-      # Send SIGABRT to everything in the control group to give RR a few seconds to tidy everything up.
-      pids = File.read(File.join("/sys/fs/cgroup", cgroup, "cgroup.procs")).lines.map { _1.strip.to_i }
-      puts "=> Sending SIGABRT to #{pids.inspect} from #{cgroup}"
-      pids.each { Process.kill :SIGABRT, _1 rescue nil }
-      10.times do
-        pids = File.read(File.join("/sys/fs/cgroup", cgroup, "cgroup.procs")).lines.map { _1.strip.to_i }
-        break if pids.empty?
-        puts "=> (still waiting for #{pids.inspect} to exit"
-        sleep 1
-      end
-      puts "=> Killing cgroup #{cgroup}"
-      File.write('1', File.join("/sys/fs/cgroup", cgroup, "cgroup.kill"))
-      # That should make evertying shut down now.
-    end
-  end
   if opts[:rr]
-    test_cmdline = [
+    recorder_cmdline = [
       'taskset', '-c', $WORKING_RR_CPUS.join(','),
       'rr', 'record', '--output-trace-dir', trace_dir,
       *[opts[:chaos] ? '--chaos' : nil].compact,
@@ -265,7 +430,9 @@ def _run_test(opts, testtask, test_file)
       '--disable-cpuid-features-ext', '0xc405814,0xe73fa021,0x3eff8ef',
       '--disable-cpuid-features-xsave', '0xfffffff0',
       '--'
-    ] + test_cmdline
+    ]
+  else
+    recorder_cmdline = []
   end
 
   if opts[:asan]
@@ -274,15 +441,16 @@ def _run_test(opts, testtask, test_file)
     test_env['SYNTAX_SUGGEST_TIMEOUT'] = '600'
   end
 
-  begin
-    sh_with_timeout!(
-      test_env, *test_cmdline,
-      timeout: opts[:test_timeout], on_timeout: on_rr_timeout,
-      unsetenv_others: true
-    )
-  rescue => e
-    puts "=> Test #{test_file} FAIL: #{e}"
-    result = false
+  executor = RecordedCommandExecutor.new(
+    recorder_cmdline:, test_cmdline:, env: test_env,
+    timeout: opts[:test_timeout], cgroup_base: opts[:cgroup_base]
+  )
+  executor.run
+
+  if executor.status.success?
+    puts "=> Test #{test_file} PASS"
+  else
+    puts "=> Test #{test_file} FAIL: status #{executor.status.inspect}"
     if opts[:rr]
       # On failure, pack the trace dir if we were tracing
       sh! 'rr', 'pack', trace_dir
@@ -314,14 +482,13 @@ def _run_test(opts, testtask, test_file)
 
       _attach_trace_to_test junit_xml_file, attach_files
     end
-  else
-    puts "=> Test #{test_file} PASS"
   end
+
   # Delete the unzipped trace dir (it's quite big)
   rm_rf trace_dir if opts[:rr]
   rm_rf File.join('/sys/fs/cgroup', cgroup) if cgroup
 
-  return result
+  return executor.status.success?
 end
 
 def do_btest(opts)
@@ -387,7 +554,7 @@ def check_can_make_cgroup!(opts)
     puts "=> Own cgroup hierarchy #{self_cgroup}"
     opts[:cgroup_base] = self_cgroup
   else
-    puts "=> Warning: Cannot create sub-cgroups, timeouts will not work."
+    raise "Cannot create sub-cgroups, timeouts will not work. Aborting."
   end
 end
 
