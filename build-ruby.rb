@@ -265,9 +265,9 @@ class RecordedCommandExecutor
     end
     itimerspec = Libc::ITimerSpec.new
     if interval
-      itimerspec[:it_value] = timespec
-    else
       itimerspec[:it_interval] = timespec
+    else
+      itimerspec[:it_value] = timespec
     end
     ret = Libc.timerfd_settime(timerfd.fileno, 0, itimerspec, nil)
     raise "timerfd_settime failed" unless ret == 0
