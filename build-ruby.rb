@@ -16,6 +16,7 @@ gemfile do
   gem 'tmpdir', '~> 0.2'
 
   gem 'ffi', '~> 1'
+  gem 'nokogiri', '~> 1.16'
 end
 
 $stdout.sync = true
@@ -108,6 +109,8 @@ class RecordedCommandExecutor
     @process_output = nil
     @pid = nil
     @status = nil
+    @t_start = nil
+    @duration = nil
 
     # Make a new cgroup to run this command in.
     @cgroup = File.join(@cgroup_base, SecureRandom.hex)
@@ -122,11 +125,13 @@ class RecordedCommandExecutor
   def process_output = @process_output
   def pid = @pid
   def status = @status
+  def duration = @duration
 
   def run
     raise ArgumentError, "can only run once" if @pidfd
 
     # We want combined stdout/stderr
+    @t_start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     @pipe_r, pipe_w = IO.pipe
     @pid = Process.spawn(
       @env, *@full_cmdline,
@@ -237,6 +242,8 @@ class RecordedCommandExecutor
       _, @status = Process.waitpid2(@pid)
     end
 
+    @duration = Process.clock_gettime(Process::CLOCK_MONOTONIC) - @t_start
+
     # Close all our FDs
     @pidfd&.close
     @pipe_r&.close
@@ -288,6 +295,66 @@ class RecordedCommandExecutor
 
   def print_process_output(text)
     $stdout.write(text)
+  end
+end
+
+class JunitXMLBuilder
+  def initialize
+    @attachments = []
+    @test_cases = []
+  end
+
+  def attach_file(attachment)
+    @attachments << attachment
+  end
+
+  TestSuite = Struct.new(:name, :duration, :test_cases, keyword_init: true)
+  TestCase = Struct.new(:name, :duration, :status, :failure_message, keyword_init: true)
+
+  def from_launchable_json(launchable_json_file)
+    file_data = begin
+      File.read(launchable_json_file)
+    rescue
+      # If reading the file failed, guess the test crahsed without actually
+      # producing the launchable report.
+      return
+    end
+    data = begin
+      JSON.parse(file_data)
+    rescue JSON::ParserError
+      # try fixing it by adding ]} to the end - maybe the report writer got interrupted
+      # between tests
+      file_data << "]}"
+      begin
+        JSON.parse(file_data)
+      rescue JSON::ParserError
+        # Nope. It was worth a try
+        return
+      end
+    end
+
+    data['testCases'].each do |test_case|
+      path_parts = test_case['testPath'].split('#')
+      path_data = path_parts.map { _1.split('=', 1) }.to_h
+    end
+  end
+
+  def test_suite(name, duration)
+
+  end
+end
+
+class BootstraptestJunitXMLBuilder < AbstractJunitXMLBuilder
+  def to_xml_doc
+    doc = Nokogiri::XML::Document.new
+    doc.root = doc.create_element('testsuites', { time: @test_command.duration})
+    testsuite = doc.create_element('testsuite', {name: @test_file, time: @test_command.duration})
+    unless @test_command.status.success?
+      testsuite << doc.create_element('failure', {
+        message: "Test exited with status #{@test_command.status.inspect}"
+      })
+    end
+    doc.root << testsuite
   end
 end
 
