@@ -1,4 +1,4 @@
-From ceb4ea86f641441a03694f34e439459bc0794a78 Mon Sep 17 00:00:00 2001
+From 8b889144fc14158de9eb24a6f482a3fdbd0efee8 Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
 Subject: [PATCH] Implement JUnit XML test reporting
@@ -11,7 +11,7 @@ Subject: [PATCH] Implement JUnit XML test reporting
 
 diff --git a/tool/lib/junit_xml_output.rb b/tool/lib/junit_xml_output.rb
 new file mode 100644
-index 0000000000..86815b5e35
+index 0000000000..78252baa27
 --- /dev/null
 +++ b/tool/lib/junit_xml_output.rb
 @@ -0,0 +1,126 @@
@@ -136,7 +136,7 @@ index 0000000000..86815b5e35
 +    repo_path = File.expand_path("#{__dir__}/../../")
 +    relative_path = path.delete_prefix("#{repo_path}/")
 +    test_name = "#{suite.name}##{method}"
-+    @junit_xml_reporter.record(suite.name, test_name, path, lineno, time, error)
++    @junit_xml_reporter.record(suite.name, test_name, relative_path, lineno, time, error)
 +
 +    super
 +  end

@@ -328,7 +328,9 @@ class JunitXMLEditor
   def attach_file(attach_file)
     testsuites = @doc.root
     testsuites.add_child('<system-err/>').tap do |el, *|
-      el.text = "--- ATTACHMENT #{attach_file} ---\n[[ATTACHMENT|#{File.absolute_path attach_file}]]\n"
+      el.add_child Nokogiri::XML::Text.new(
+        "--- ATTACHMENT #{attach_file} ---\n[[ATTACHMENT|#{File.absolute_path attach_file}]]\n",
+      )
     end
   end
 
