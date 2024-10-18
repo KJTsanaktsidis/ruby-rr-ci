@@ -160,7 +160,6 @@ RUN <<BASHSCRIPT
   rm -Rf yaml-$LIBYAM_VERSION
 BASHSCRIPT
 
-COPY rr-cpuid-faulting.patch .
 RUN <<BASHSCRIPT
   set -ex
 
@@ -184,8 +183,6 @@ RUN <<BASHSCRIPT
 
   git clone --depth=1 https://github.com/rr-debugger/rr.git
   cd rr
-
-  patch -Np1 -i ~/rr-cpuid-faulting.patch
 
   mkdir build
   cd build
