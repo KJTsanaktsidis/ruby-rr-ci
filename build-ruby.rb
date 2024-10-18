@@ -332,6 +332,11 @@ class JunitXMLEditor
     end
   end
 
+  def set_test_task_name(name)
+    testsuites = @doc.xpath('//*/testsuites[1]').first
+    testsuites['name'] = name
+  end
+
   def to_xml = @doc.to_xml
 end
 
@@ -449,6 +454,7 @@ def _run_test(opts, testtask, test_file)
   else
     JunitXMLEditor.from_command_result(relative_test_file, executor)
   end
+  junit_xml_editor.set_test_task_name testtask
 
   if executor.status.success?
     puts "=> Test #{test_file} PASS"
