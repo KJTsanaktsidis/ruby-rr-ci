@@ -130,6 +130,10 @@ class RecordedCommandExecutor
   def run
     raise ArgumentError, "can only run once" if @pidfd
 
+    env_string = @env.map { "#{Shellwords.escape _1}=#{Shellwords.escape _2}" }.join(' ')
+    cmdline_string = Shellwords.join @full_cmdline
+    log "#{env_string} #{cmdline_string}"
+
     # We want combined stdout/stderr
     @t_start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     @pipe_r, pipe_w = IO.pipe
