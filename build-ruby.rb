@@ -348,7 +348,7 @@ class JunitXMLBuilder
   end
 end
 
-class BootstraptestJunitXMLBuilder < AbstractJunitXMLBuilder
+class BootstraptestJunitXMLBuilder < JunitXMLBuilder
   def to_xml_doc
     doc = Nokogiri::XML::Document.new
     doc.root = doc.create_element('testsuites', { time: @test_command.duration})
