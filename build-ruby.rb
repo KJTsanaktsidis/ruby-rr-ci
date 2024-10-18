@@ -302,64 +302,37 @@ class RecordedCommandExecutor
   end
 end
 
-class JunitXMLBuilder
-  def initialize
-    @attachments = []
-    @test_cases = []
+class JunitXMLEditor
+  def initialize(doc)
+    @doc = doc
   end
 
-  def attach_file(attachment)
-    @attachments << attachment
+  def self.from_junit_data(junit_data)
+    self.new(Nokogiri::XML.parse(junit_data))
   end
 
-  TestSuite = Struct.new(:name, :duration, :test_cases, keyword_init: true)
-  TestCase = Struct.new(:name, :duration, :status, :failure_message, keyword_init: true)
-
-  def from_launchable_json(launchable_json_file)
-    file_data = begin
-      File.read(launchable_json_file)
-    rescue
-      # If reading the file failed, guess the test crahsed without actually
-      # producing the launchable report.
-      return
-    end
-    data = begin
-      JSON.parse(file_data)
-    rescue JSON::ParserError
-      # try fixing it by adding ]} to the end - maybe the report writer got interrupted
-      # between tests
-      file_data << "]}"
-      begin
-        JSON.parse(file_data)
-      rescue JSON::ParserError
-        # Nope. It was worth a try
-        return
+  def self.from_command_result(test_suite, command)
+    doc = Nokogiri::XML::Document.new
+    testsuites = doc.add_child('<testsuites/>')
+    testsuites.add_child('<testsuite/>').tap do |el,|
+      el['name'] = test_suite
+      el['time'] = command.duration.to_s
+      unless command.status.success?
+        el.add_element('error', { 'message' => "Command exited with status #{command.status.exitstatus}" })
       end
     end
 
-    data['testCases'].each do |test_case|
-      path_parts = test_case['testPath'].split('#')
-      path_data = path_parts.map { _1.split('=', 1) }.to_h
+    self.new(doc)
+  end
+
+  def attach_file(attach_file)
+    testsuites = @doc.xpath('//*/testsuites[1]').first 
+    testsuites.add_child('<system-err/>').tap do |el, *|
+      el.text = "--- ATTACHMENT #{attach_file} ---\n[[ATTACHMENT|#{File.absolute_path attach_file}]]\n"
     end
   end
 
-  def test_suite(name, duration)
-
-  end
-end
-
-class BootstraptestJunitXMLBuilder < JunitXMLBuilder
-  def to_xml_doc
-    doc = Nokogiri::XML::Document.new
-    doc.root = doc.create_element('testsuites', { time: @test_command.duration})
-    testsuite = doc.create_element('testsuite', {name: @test_file, time: @test_command.duration})
-    unless @test_command.status.success?
-      testsuite << doc.create_element('failure', {
-        message: "Test exited with status #{@test_command.status.inspect}"
-      })
-    end
-    doc.root << testsuite
-  end
+  def to_xml = @doc.to_xml
 end
 
 def do_build(opts)
@@ -403,58 +376,12 @@ def do_build(opts)
   end
 end
 
-def _attach_trace_to_test(junit_xml_file, attach_files)
-  junit_doc = begin
-    File.open(junit_xml_file, 'r') do |f|
-      REXML::Document.new f
-    end
-  rescue Errno::ENOENT
-    puts "=> Not attaching to #{junit_xml_file} because it does not exist"
-    return
-  end
-  output_els = []
-
-  fail_xpath = [
-    '//*/testsuite[descendant::error]',
-    '//*/testsuite[descendant::failure]',
-    '//*/testcase[descendant::error]',
-    '//*/testcase[descendant::failure]',
-  ].join(' | ')
-  REXML::XPath.each(junit_doc, fail_xpath) do |tc_el|
-    tc_el_stderr = REXML::XPath.first(tc_el, '/system-err')
-    if tc_el_stderr.nil?
-      tc_el_stderr = REXML::Element.new('system-err')
-      tc_el.add_element tc_el_stderr
-    end
-    output_els << tc_el_stderr
-  end
-
-  output_els.each do |el|
-    # Two things;
-    #   - The Jenkins JUnit attachment plugin wants this as an absolute path. The container we run in
-    #     maps the workspace directory to the same path on the host and container, so this works.
-    #   - Important that each stderr is unique, otherwise the jenkins test reporting machinery coalesces
-    #     them together. So add the xpath of the element to it.
-    attach_files.each do |attach_file|
-      if File.exist?(attach_file)
-        el.add_text "\n\n--- ATTACHMENT #{attach_file} ---\n#{el.xpath}\n[[ATTACHMENT|#{File.absolute_path attach_file}]]\n"
-      else
-        puts "=> Not attaching #{attach_file} to junit xml because it does not exist"
-      end
-    end
-  end
-  File.open(junit_xml_file, 'w') do |f|
-    junit_doc.write(output: f)
-  end
-end
-
 def _run_test(opts, testtask, test_file)
   # cwd is assumed to be $srcdir/build
 
-  result = true
-
   # relative_test_file will be something like 'bootstraptest/test_attr.rb' or 'test/zlib/test_zlib.rb'
   relative_test_file = Pathname.new(test_file).relative_path_from('..').to_s
+  is_bootstraptest = relative_test_file.start_with?('bootstraptest/')
   # full_test_name will be something like 'test_zlib_test_zlib'
   full_test_name = relative_test_file.gsub('/', '__').gsub(/\.rb$/, '')
   # test_output_dir will be test_results/$full_test_name
@@ -470,10 +397,10 @@ def _run_test(opts, testtask, test_file)
 
   testopts = [
     '-v','--tty=no',
-    "--junit-filename=#{junit_xml_file}",
-    "--junit-suite-group-name=#{testtask}",
+    *[is_bootstraptest ? nil : "--junit-filename=#{junit_xml_file}"].compact,
     test_file
   ]
+
   test_cmdline = [
     'make',
     "TESTOPTS=#{Shellwords.join(testopts)}",
@@ -484,7 +411,6 @@ def _run_test(opts, testtask, test_file)
 
   trace_dir = File.join(test_output_dir, 'rr_trace')
   cgroup = nil
-  on_rr_timeout = nil
   if opts[:rr]
     recorder_cmdline = [
       'taskset', '-c', $WORKING_RR_CPUS.join(','),
@@ -518,6 +444,12 @@ def _run_test(opts, testtask, test_file)
   )
   executor.run
 
+  junit_xml_editor = if File.exist?(junit_xml_file)
+    JunitXMLEditor.from_junit_data(File.read(junit_xml_file))
+  else
+    JunitXMLEditor.from_command_result(relative_test_file, executor)
+  end
+
   if executor.status.success?
     puts "=> Test #{test_file} PASS"
   else
@@ -539,7 +471,7 @@ def _run_test(opts, testtask, test_file)
       trace_archive_file = File.join(test_output_dir, 'rr_trace.tar.gz')
       sh! 'tar', '-cz', '-f', trace_archive_file, '-C', test_output_dir, 'rr_trace'
       # Attach it to the test output using the JUnit Attachments convention
-      attach_files = [trace_archive_file]
+      junit_xml_editor.attach_file trace_archive_file
       if opts[:pernosco]
         pernosco_file = File.join(test_output_dir, 'pernosco.zstd')
         sh! 'pernosco-submit', 'upload',
@@ -548,12 +480,12 @@ def _run_test(opts, testtask, test_file)
           '--build-dir', File.realpath('.'),
           '--copy-sources', File.realpath('..'),
           trace_dir, File.realpath('..')
-        attach_files << pernosco_file
+        junit_xml_editor.attach_file pernosco_file
       end
-
-      _attach_trace_to_test junit_xml_file, attach_files
     end
   end
+
+  File.write(junit_xml_file, junit_xml_editor.to_xml)
 
   # Delete the unzipped trace dir (it's quite big)
   rm_rf trace_dir if opts[:rr]

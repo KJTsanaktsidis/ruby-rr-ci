@@ -1,155 +1,33 @@
-From 8cd458d1ad1aae66831e085ad988702a5a0b9e05 Mon Sep 17 00:00:00 2001
+From ceb4ea86f641441a03694f34e439459bc0794a78 Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
 Subject: [PATCH] Implement JUnit XML test reporting
 
 ---
- bootstraptest/runner.rb      |  40 ++++-
- tool/lib/junit_xml_output.rb | 321 +++++++++++++++++++++++++++++++++++
+ tool/lib/junit_xml_output.rb | 126 +++++++++++++++++++++++++++++++++++
  tool/lib/test/unit.rb        |   5 +-
- 3 files changed, 361 insertions(+), 5 deletions(-)
+ 2 files changed, 130 insertions(+), 1 deletion(-)
  create mode 100644 tool/lib/junit_xml_output.rb
 
-diff --git a/bootstraptest/runner.rb b/bootstraptest/runner.rb
-index 24324fa51f..97a66f4911 100755
---- a/bootstraptest/runner.rb
-+++ b/bootstraptest/runner.rb
-@@ -12,6 +12,7 @@
- begin
-   require 'fileutils'
-   require 'tmpdir'
-+  require 'pathname'
- rescue LoadError
-   $:.unshift File.join(File.dirname(__FILE__), '../lib')
-   retry
-@@ -78,7 +79,9 @@ def Dir.mktmpdir(prefix_suffix=nil, tmpdir=nil)
-                 :platform,
-                 :timeout,
-                 :timeout_scale,
--                :launchable_test_reports
-+                :launchable_test_reports,
-+                :junit_xml_writer,
-+                :junit_suite_group_name
-                 )
- BT = Class.new(bt) do
-   def indent=(n)
-@@ -225,6 +228,8 @@ def main
-     -s, --stress                    stress test.
-     -v, --verbose                   Output test name before exec.
-     -q, --quiet                     Don\'t print header message.
-+        --junit-filename=OUT        Emit a JUnit-style XML test report to OUT
-+        --junit-suite-group-name=X  Suite group name to put in Junit XML output
-     -h, --help                      Print this message and quit.
- End
-       exit true
-@@ -243,6 +248,19 @@ def main
-         writer.close
-       }
-       true
-+    when /\A--junit-suite-group-name=(.*)\z/
-+      BT.junit_suite_group_name = $1
-+    when /\A--junit-filename=(.*)\z/
-+      junit_filename = $1
-+      require_relative '../tool/lib/junit_xml_output'
-+      BT.junit_xml_writer = JUnitXMLOutput::Writer.new 'btest'
-+      BT.junit_xml_writer.started!
-+      at_exit do
-+        BT.junit_xml_writer.finished!
-+        BT.junit_suite_group_name&.tap { BT.junit_xml_writer.test_run_name = _1 }
-+        BT.junit_xml_writer.write_to_file junit_filename
-+      end
-+      true
-     else
-       false
-     end
-@@ -257,7 +275,7 @@ def main
-   BT.progress = %w[- \\ | /]
-   BT.progress_bs = "\b" * BT.progress[0].size
-   BT.tty = $stderr.tty? if BT.tty.nil?
--  BT.wn ||= /-j(\d+)?/ =~ (ENV["MAKEFLAGS"] || ENV["MFLAGS"]) ? $1.to_i : 1
-+  BT.wn ||= /(?:\A|\s)-j(\d+)?/ =~ (ENV["MAKEFLAGS"] || ENV["MFLAGS"]) ? $1.to_i : 1
- 
-   case BT.color
-   when nil
-@@ -426,6 +444,7 @@ def exec_test(paths)
-   else
-     prev_basename = nil
-     Assertion.all.each do |basename, assertions|
-+      BT.junit_xml_writer&.started_testsuite! basename
-       if !BT.quiet && basename != prev_basename
-         prev_basename = basename
-         $stderr.printf("%s%-*s ", erase(BT.quiet), BT.width, basename)
-@@ -437,8 +456,15 @@ def exec_test(paths)
-       error = BT_STATE.error
- 
-       assertions.each do |assertion|
-+        old_error = BT_STATE.error
-+        BT.junit_xml_writer&.started_testcase!(
-+          "##{assertion.id}: #{assertion.relative_path}:#{assertion.lineno}", assertion.relative_path, assertion.lineno
-+        )
-+
-         BT_STATE.count += 1
-         assertion.call
-+
-+        BT.junit_xml_writer&.finished_testcase!(BT_STATE.error == old_error ? :pass : :failure)
-       end
- 
-       if BT.tty
-@@ -453,6 +479,8 @@ def exec_test(paths)
-         end
-       end
-       $stderr.puts if !BT.quiet and (BT.tty or BT_STATE.error == error)
-+    ensure
-+      BT.junit_xml_writer&.finished_testsuite!
-     end
-   end
- 
-@@ -487,7 +515,7 @@ def target_platform
-   BT.platform or RUBY_PLATFORM
- end
- 
--class Assertion < Struct.new(:src, :path, :lineno, :proc)
-+class Assertion < Struct.new(:src, :path, :lineno, :proc, :fullpath)
-   prepend Launchable
-   @count = 0
-   @all = Hash.new{|h, k| h[k] = []}
-@@ -650,6 +678,10 @@ def make_srcfile(frozen_string_literal: nil)
-     }
-     filename
-   end
-+
-+  def relative_path
-+    Pathname.new(fullpath).relative_path_from(File.join(__dir__, '..')).to_s
-+  end
- end
- 
- def add_assertion src, pr
-@@ -657,7 +689,7 @@ def add_assertion src, pr
-   lineno = loc.lineno
-   path = File.basename(loc.path)
- 
--  Assertion.new(src, path, lineno, pr)
-+  Assertion.new(src, path, lineno, pr, loc.path)
- end
- 
- def assert_equal(expected, testsrc, message = '', opt = '', **kwargs)
 diff --git a/tool/lib/junit_xml_output.rb b/tool/lib/junit_xml_output.rb
 new file mode 100644
-index 0000000000..69e41fa8f6
+index 0000000000..86815b5e35
 --- /dev/null
 +++ b/tool/lib/junit_xml_output.rb
-@@ -0,0 +1,321 @@
-+require 'time'
-+
+@@ -0,0 +1,126 @@
 +module JUnitXMLOutput
-+
-+  module XMLMethods
++  class Writer
++    TestSuite = Struct.new(:name, :test_cases, keyword_init: true)
++    TestCase = Struct.new(
++      :name, :path, :lineno, :time, :error, keyword_init: true
++    )
 +    XML_REPLACEMENTS = {
 +      '<' => '&lt;',
 +      '>' => '&gt;',
 +      '"' => '&quot;',
 +      "'" => '&apos;',
 +      "\r" => '&#13;',
++      "\n" => '&#10;',
 +      '&' => '&amp;',
 +    }.freeze
 +    XML_REPLACEMENTS_REGEX = Regexp.union(XML_REPLACEMENTS.keys).freeze
@@ -159,309 +37,112 @@ index 0000000000..69e41fa8f6
 +      str.to_s.gsub(CONTROL_CHAR_REGEX, '').gsub(XML_REPLACEMENTS_REGEX, XML_REPLACEMENTS)
 +    end
 +
-+    def build_xml_element(element, attrs, body)
++    def open_xml_element(element, attrs = {})
 +      [
 +        "<",
 +        element,
 +        (attrs && attrs.any?) ? " " : "",
 +        attrs.map { |k, v| "#{k}=\"#{xml_escape(v)}\"" }.join(' '),
 +        ">",
-+        body,
-+        "</",
-+        element,
-+        ">"
 +      ].compact.join
 +    end
-+  end
 +
-+  class TestSuiteGroup
-+    include XMLMethods
-+    attr_accessor :name, :test_count, :failure_count, :started_at, :finished_at
-+    attr_accessor :testsuites
++    def close_xml_element(element)
++      ["</", element, ">"].join
++    end
 +
 +    def initialize
-+      @testsuites = []
-+      @test_count = 0
-+      @failure_count = 0
-+    end
-+
-+    def to_xml_string
-+      attrs = {}
-+      attrs['name'] = @name if @name
-+      attrs['tests'] = @test_count if @test_count
-+      attrs['failures'] = @failure_count if @failure_count
-+      attrs['timestamp'] = @started_at.iso8601 if @started_at
-+      attrs['time'] = @finished_at - @started_at if @started_at && @finished_at
-+      build_xml_element('testsuites', attrs, testsuites.map(&:to_xml_string).join)
-+    end
-+  end
-+
-+  class TestSuite
-+    include XMLMethods
-+    attr_accessor :name, :test_count, :failure_count, :started_at, :finished_at
-+    attr_accessor :file, :output_capture, :testcases
-+
-+    def initialize
-+      @testcases = []
-+      @test_count = 0
-+      @failure_count = 0
-+    end
-+
-+    def to_xml_string
-+      attrs = {}
-+      attrs['name'] = @name if @name
-+      attrs['tests'] = @test_count if @test_count
-+      attrs['failures'] = @failure_count if @failure_count
-+      attrs['timestamp'] = @started_at.iso8601 if @started_at
-+      attrs['time'] = @finished_at - @started_at if @started_at && @finished_at
-+      attrs['file'] = @file if @file
-+      body_parts = testcases.map(&:to_xml_string)
-+
-+      if @output_capture
-+        body_parts << build_xml_element('system-out', {}, xml_escape(@output_capture.safe_captured))
-+      end
-+
-+      build_xml_element('testsuite', attrs, body_parts.join)
-+    end
-+  end
-+
-+  class TestCase
-+    include XMLMethods
-+    attr_accessor :name, :started_at, :finished_at, :file, :line, :status
-+    attr_accessor :output_capture, :fail_message, :fail_class, :fail_data
-+
-+    def to_xml_string
-+      attrs = {}
-+      attrs['name'] = @name if @name
-+      attrs['time'] = @finished_at - @started_at if @started_at && @finished_at
-+      attrs['file'] = @file if @file
-+      attrs['line'] = @line if @line
-+
-+      body_parts = []
-+      fail_attrs = {}
-+      fail_attrs['message'] = @fail_message if @fail_message
-+      fail_attrs['type'] = @fail_class if @fail_class
-+      fail_message_esc = @fail_message ? xml_escape(fail_message) : ''
-+      case @status
-+      when :pass
-+      when :failure
-+        body_parts << build_xml_element('failure', fail_attrs, fail_message_esc)
-+      when :skipped
-+        body_parts << '<skipped />'
-+      when :error
-+        body_parts << build_xml_element('error', fail_attrs, fail_message_esc)
-+      end
-+
-+      if @output_capture
-+        body_parts << build_xml_element('system-out', {}, xml_escape(@output_capture.safe_captured))
-+      end
-+
-+      build_xml_element('testcase', attrs, body_parts.join)
-+    end
-+  end
-+
-+  class OutputCapturer
-+    attr_reader :captured
-+
-+    def start!
-+      @old_stdout = $stdout.dup
-+      @old_stderr = $stderr.dup
-+      @pipe_r, @pipe_w = IO.pipe
-+      $stdout.reopen @pipe_w
-+      $stderr.reopen @pipe_w
-+      @captured = +""
-+      @tee_thread = Thread.new(&method(:run_tee))
-+    end
-+
-+    def finish!
-+      $stdout.reopen @old_stdout
-+      $stderr.reopen @old_stderr
-+      @pipe_w.close
-+      @tee_thread.join
-+      @pipe_r.close
-+      @old_stdout.close
-+      @old_stderr.close
-+    end
-+
-+    def safe_captured
-+      captured.force_encoding(Encoding::UTF_8).encode(Encoding::UTF_8, invalid: :replace, undef: :replace)
-+    end
-+
-+    private
-+
-+    def run_tee
-+      loop do
-+        data = @pipe_r.readpartial(4096)
-+        @captured << data
-+        @old_stdout.write data
-+      rescue EOFError
-+        return
-+      end
-+    end
-+  end
-+
-+  class Writer
-+    def initialize(test_run_name = 'test')
-+      @test_suite_group = TestSuiteGroup.new.tap do |g|
-+        g.name = test_run_name
++      @testsuites = Hash.new do |h, k|
++        h[k] = TestSuite.new(name: k, test_cases: [])
 +      end
 +    end
 +
-+    attr_reader :test_suite_group, :current_testsuite, :current_testcase
-+
-+    def test_run_name
-+      @test_suite_group.name
++    def record(suite_name, test_name, path, lineno, time, error)
++      @testsuites[suite_name].test_cases << TestCase.new(
++        name: test_name, path:, lineno:, time:, error:,
++      )
 +    end
 +
-+    def test_run_name=(name)
-+      @test_suite_group.name = name
-+    end
-+
-+
-+    def to_xml_string
-+      '<?xml version = "1.0" encoding = "UTF-8" ?>' + @test_suite_group.to_xml_string + "\n"
-+    end
-+
-+    def started!
-+      @test_suite_group.started_at = Time.now
-+    end
-+
-+    def finished!
-+      @test_suite_group.finished_at = Time.now
-+    end
-+
-+    def started_testsuite!(name)
-+      @current_testsuite = TestSuite.new.tap do |ts|
-+        # Java-ize the test name for Jenkins' benefit
-+        ts.name = "#{@test_suite_group.name}.#{name.gsub(/\//, '.').gsub(/\.rb$/, '')}"
-+        ts.started_at = Time.now
-+        ts.output_capture = OutputCapturer.new
-+        ts.output_capture.start!
-+      end
-+      @test_suite_group.testsuites << @current_testsuite
-+    end
-+
-+    def finished_testsuite!
-+      @current_testsuite.finished_at = Time.now
-+      @current_testsuite.output_capture.finish!
-+      @test_suite_group.test_count += @current_testsuite.test_count
-+      @test_suite_group.failure_count += @current_testsuite.failure_count
-+      @current_testsuite = nil
-+    end
-+
-+    def started_testcase!(name, file, line)
-+      @current_testcase = TestCase.new.tap do |tc|
-+        tc.name = name
-+        tc.file = file
-+        tc.line = line
-+        tc.started_at = Time.now
-+        tc.output_capture = OutputCapturer.new
-+        tc.output_capture.start!
-+      end
-+      @current_testsuite.testcases << @current_testcase
-+    end
-+
-+    def finished_testcase!(status = nil)
-+      @current_testcase.finished_at = Time.now
-+      @current_testcase.status = status if status
-+      @current_testcase.output_capture.finish!
-+      @current_testsuite.test_count += 1
-+      @current_testsuite.failure_count += 1 if [:failure, :error].include?(@current_testcase.status)
-+      @current_testcase = nil
-+    end
-+
-+    def write_to_file(filename)
-+      File.open(filename, 'w') do |f|
-+        f.write to_xml_string
-+      end
-+    end
-+  end
-+
-+  module TestUnitSupport
-+    def record(suite, method, assertions, time, error, source_location = nil)
-+      status = case error
-+      when nil
-+        :pass
-+      when Test::Unit::PendedError
-+        :skipped
-+      when Test::Unit::AssertionFailedError
-+        :failure
-+      else
-+        :error
-+      end
-+
-+      if tc = @junit_xml_reporter&.current_testcase
-+        tc.status = status
-+        tc.fail_class = error.class.to_s
-+        tc.fail_message = error.message if error.respond_to?(:message)
-+        tc.fail_data = +"#{suite.name}##{method}"
-+        if loc = (source_location || suite.instance_method(method).source_location)
-+          tc.fail_data += "#{loc[0]}:#{loc[1]}"
-+        end
-+        tc.fail_data += "\n"
-+        tc.fail_data += error.inspect
-+        tc.fail_data += "\n\n" + error.backtrace.join(' ') if error.respond_to?(:backtrace) && error.backtrace
-+      end
-+
-+      @junit_xml_reporter&.current_testcase&.status = status
-+      super
-+    end
-+
-+    private
-+
-+    def setup_options(opts, options)
-+      super
-+      opts.on_tail '--junit-filename=PATH', String, 'JUnit XML format output' do |path|
-+        @junit_xml_reporter = JUnitXMLOutput::Writer.new
-+        @junit_xml_report_path = path
-+        main_pid = Process.pid
-+        at_exit do
-+          # This block is executed when the fork block in a test is completed.
-+          # Therefore, we need to verify whether all tests have been completed.
-+          stack = caller
-+          if stack.size == 0 && main_pid == Process.pid && $!.is_a?(SystemExit)
-+            @junit_xml_reporter.write_to_file path
++    def write_to_file(path)
++      File.open(path, 'w') do |f|
++        f << '<?xml version="1.0" encoding="UTF-8"?>'
++        f << open_xml_element('testsuites')
++        @testsuites.values.each do |suite|
++          f << open_xml_element('testsuite', { 'name' => suite.name })
++          suite.test_cases.each do |tc|
++            emit_testcase(f, tc)
 +          end
++          f << close_xml_element('testsuite')
++        end
++        f << close_xml_element('testsuites')
++      end
++    end
++
++    private
++
++    def emit_testcase(f, tc)
++      f << open_xml_element('testcase', {
++        'name' => tc.name,
++        'time' => tc.time.to_s,
++        'file' => tc.path,
++        'lineno' => tc.lineno.to_s,
++      })
++      case tc.error
++      when nil
++      when Test::Unit::PendedError
++        f << open_xml_element('skipped', { 'message' => tc.error.message })
++        f << close_xml_element('skipped')
++      when Test::Unit::AssertionFailedError, Timeout::Error
++        f << open_xml_element('failure', {
++          'type' => tc.error.class.name,
++          'message' => tc.error.message,
++        })
++        f << xml_escape(tc.error.backtrace.join("\n"))
++        f << close_xml_element('failure')
++      else
++        f << open_xml_element('error', {
++          'type' => tc.error.class.name,
++          'message' => tc.error.message,
++        })
++        f << xml_escape(tc.error.backtrace.join("\n"))
++        f << close_xml_element('error')
++      end
++      f << close_xml_element('testcase')
++    end
++  end
++
++  private def setup_options(opts, options)
++    super
++    opts.on_tail '--junit-filename=PATH', String, 'JUnit XML format output' do |path|
++      @junit_xml_reporter = JUnitXMLOutput::Writer.new
++      @junit_xml_report_path = path
++      main_pid = Process.pid
++      at_exit do
++        # This block is executed when the fork block in a test is completed.
++        # Therefore, we need to verify whether all tests have been completed.
++        stack = caller
++        if stack.size == 0 && main_pid == Process.pid && $!.is_a?(SystemExit)
++          @junit_xml_reporter.write_to_file path
 +        end
 +      end
-+
-+      opts.on_tail '--junit-suite-group-name=NAME', String, 'Suite group name to put in Junit XML output' do |name|
-+        @junit_xml_suite_group_name = name
-+      end
 +    end
++  end
 +
-+    def _calc_suite_name(suite) = ::Class.instance_method(:name).bind(suite).call.to_s
-+    def _calc_test_name(inst) = "#{_calc_suite_name(inst.class)}##{inst.__name__.to_s}"
-+    def _calc_test_file_line(inst) = ::Object.instance_method(:method).bind(inst).call(inst.__name__).source_location
++  def record(suite, method, assertions, time, error, source_location = nil)
++    return super unless @junit_xml_reporter
 +
-+    def _run_suites(suites, type)
-+      @junit_xml_reporter&.test_suite_group.name = @junit_xml_suite_group_name if @junit_xml_suite_group_name
-+      @junit_xml_reporter&.started!
-+      super
-+    ensure
-+      @junit_xml_reporter&.finished!
-+    end
++    loc = source_location || suite.instance_method(method).source_location || []
++    path, lineno = loc
++    repo_path = File.expand_path("#{__dir__}/../../")
++    relative_path = path.delete_prefix("#{repo_path}/")
++    test_name = "#{suite.name}##{method}"
++    @junit_xml_reporter.record(suite.name, test_name, path, lineno, time, error)
 +
-+    def _run_suite(suite, type)
-+      @junit_xml_reporter&.started_testsuite! _calc_suite_name(suite)
-+      return super
-+    ensure
-+      @junit_xml_reporter&.finished_testsuite!
-+    end
-+
-+    def _start_method(inst)
-+      @junit_xml_reporter&.started_testcase! _calc_test_name(inst), *_calc_test_file_line(inst)
-+      super
-+    end
-+
-+    def _end_method(inst)
-+      @junit_xml_reporter&.finished_testcase!
-+      super
-+    end
++    super
 +  end
 +end
 diff --git a/tool/lib/test/unit.rb b/tool/lib/test/unit.rb
-index 30f30df62e..bfe018524f 100644
+index 30f30df62e..18db233ad1 100644
 --- a/tool/lib/test/unit.rb
 +++ b/tool/lib/test/unit.rb
 @@ -19,6 +19,7 @@ def warn(message, category: nil, **kwargs)
@@ -489,10 +170,10 @@ index 30f30df62e..bfe018524f 100644
        prepend Test::Unit::TimeoutOption
        prepend Test::Unit::RunCount
        prepend Test::Unit::LaunchableOption::Nothing
-+      prepend JUnitXMLOutput::TestUnitSupport
++      prepend JUnitXMLOutput
  
        ##
        # Begins the full test run. Delegates to +runner+'s #_run method.
 -- 
-2.46.0
+2.47.0
 
