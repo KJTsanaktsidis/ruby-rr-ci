@@ -326,14 +326,14 @@ class JunitXMLEditor
   end
 
   def attach_file(attach_file)
-    testsuites = @doc.xpath('//*/testsuites[1]').first 
+    testsuites = @doc.root
     testsuites.add_child('<system-err/>').tap do |el, *|
       el.text = "--- ATTACHMENT #{attach_file} ---\n[[ATTACHMENT|#{File.absolute_path attach_file}]]\n"
     end
   end
 
   def set_test_task_name(name)
-    testsuites = @doc.xpath('//*/testsuites[1]').first
+    testsuites = @doc.root
     testsuites['name'] = name
   end
 
