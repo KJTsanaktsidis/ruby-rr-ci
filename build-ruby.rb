@@ -346,6 +346,14 @@ class JunitXMLEditor
     end
   end
 
+  def stdout=(stdout_data)
+    @doc.xpath('//testsuite').each do |attach_el|
+      attach_el.add_child('<system-out/>').tap do |el, *|
+        el.add_child Nokogiri::XML::Text.new(stdout_data, @doc)
+      end
+    end
+  end
+
   attr_accessor :test_task_name
 
   def to_xml
@@ -436,7 +444,6 @@ def _run_test(opts, testtask, test_file)
   ]
 
   trace_dir = File.join(test_output_dir, 'rr_trace')
-  cgroup = nil
   if opts[:rr]
     recorder_cmdline = [
       'taskset', '-c', $WORKING_RR_CPUS.join(','),
@@ -476,6 +483,7 @@ def _run_test(opts, testtask, test_file)
     JunitXMLEditor.from_command_result(relative_test_file, executor)
   end
   junit_xml_editor.test_task_name = testtask
+  junit_xml_editor.stdout = executor.process_output
 
   if executor.status.success?
     puts "=> Test #{test_file} PASS"
