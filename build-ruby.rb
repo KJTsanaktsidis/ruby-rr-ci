@@ -366,8 +366,8 @@ class JunitXMLEditor
   end
 
   def all_system_errs
-    [*@doc.css('testsuite'), *@doc.css('testcase')].map do |attach_el|
-      attach_el.css('> system-out').first || attach_el.add_child('<system-out />')
+    [*@doc.css('testsuite'), *@doc.css('testcase')].map do |el|
+      el.css('> system-out').first || el.add_child('<system-out />').first
     end
   end
 end
