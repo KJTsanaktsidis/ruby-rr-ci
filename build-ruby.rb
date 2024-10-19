@@ -334,12 +334,19 @@ class JunitXMLEditor
     end
   end
 
-  def set_test_task_name(name)
-    testsuites = @doc.root
-    testsuites['name'] = name
+  attr_accessor :test_task_name
+
+  def to_xml
+    if @test_task_name
+      @doc.root['name'] = @test_task_name
+      @doc.xpath('//testsuite').each do |el|
+        # Need to prepend the task name with a dot, for Jenkins' benefit
+        el['name'] = "#{@test_task_name}.#{el['name']}"
+      end
+    end
   end
 
-  def to_xml = @doc.to_xml
+  @doc.to_xml
 end
 
 def do_build(opts)
@@ -456,7 +463,7 @@ def _run_test(opts, testtask, test_file)
   else
     JunitXMLEditor.from_command_result(relative_test_file, executor)
   end
-  junit_xml_editor.set_test_task_name testtask
+  junit_xml_editor.test_task_name = testtask
 
   if executor.status.success?
     puts "=> Test #{test_file} PASS"
