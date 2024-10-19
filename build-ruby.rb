@@ -315,10 +315,13 @@ class JunitXMLEditor
     testsuites = doc.add_child('<testsuites/>')
     testsuites.add_child('<testsuite/>').tap do |el,|
       el['name'] = test_suite
-      el['time'] = command.duration.to_s
-      unless command.status.success?
-        el.add_child('<error />').tap do |err_el,|
-          err_el['message'] = "Command exited with status #{command.status.exitstatus}"
+      el.add_child('<testcase />').tap do |tc_el,|
+        tc_el['name'] = test_suite
+        tc_el['time'] = command.duration.to_s
+        unless command.status.success?
+          tc_el.add_child('<error />').tap do |err_el,|
+            err_el['message'] = "Command exited with status #{command.status.exitstatus}"
+          end
         end
       end
     end
@@ -327,8 +330,7 @@ class JunitXMLEditor
   end
 
   def attach_file(attach_file)
-    testsuites = @doc.root
-    testsuites.add_child('<system-err/>').tap do |el, *|
+    @doc.xpath('//testsuite').first.add_child('<system-err/>').tap do |el, *|
       el.add_child Nokogiri::XML::Text.new(
         "--- ATTACHMENT #{attach_file} ---\n[[ATTACHMENT|#{File.absolute_path attach_file}]]\n",
         @doc
@@ -343,7 +345,7 @@ class JunitXMLEditor
       @doc.root['name'] = @test_task_name
       @doc.xpath('//testsuite').each do |el|
         # Need to prepend the task name with a dot, for Jenkins' benefit
-        el['name'] = "#{@test_task_name}.#{el['name']}"
+        el['name'] = "#{@test_task_name}.#{el['name'].gsub(/\//, '.')}"
       end
     end
 
