@@ -524,7 +524,6 @@ def _run_test(opts, testtask, test_file)
 
   # Delete the unzipped trace dir (it's quite big)
   rm_rf trace_dir if opts[:rr]
-  rm_rf File.join('/sys/fs/cgroup', cgroup) if cgroup
 
   return executor.status.success?
 end
