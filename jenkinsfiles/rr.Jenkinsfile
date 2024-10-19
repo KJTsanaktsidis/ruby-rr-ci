@@ -71,7 +71,7 @@ pipeline {
             "$(cat image.txt)" \
             ../build-ruby.rb --build
         '''
-        sh ./make_a_test_fail.sh
+        sh './make_a_test_fail.sh'
       }
     }
     stage('Run test suite') {
