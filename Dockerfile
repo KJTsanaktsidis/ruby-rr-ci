@@ -160,6 +160,7 @@ RUN <<BASHSCRIPT
   rm -Rf yaml-$LIBYAM_VERSION
 BASHSCRIPT
 
+COPY 0001-Add-a-new-ASAN-exclusion-range.patch .
 RUN <<BASHSCRIPT
   set -ex
 
@@ -183,6 +184,8 @@ RUN <<BASHSCRIPT
 
   git clone --depth=1 https://github.com/rr-debugger/rr.git
   cd rr
+
+  patch -Np1 -i ~/0001-Add-a-new-ASAN-exclusion-range.patch
 
   mkdir build
   cd build
