@@ -1,5 +1,6 @@
 #!/bin/bash
 # echo "assert_equal 'ok', %q{puts 'fail'}" >> ruby/bootstraptest/test_attr.rb
+pushd ruby;
 patch -Np1 <<PATCHFILE
 diff --git a/test/ostruct/test_ostruct.rb b/test/ostruct/test_ostruct.rb
 index 19bb606145..af23867612 100644
@@ -14,3 +15,4 @@ index 19bb606145..af23867612 100644
 
    def test_dig
 PATCHFILE
+popd;
