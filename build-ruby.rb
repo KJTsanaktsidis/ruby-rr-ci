@@ -9,7 +9,6 @@ gemfile do
   gem 'open3', '~> 0.2'
   gem 'optparse', '~> 0.5'
   gem 'pathname', '~> 0.3'
-  gem 'rexml', '~> 3'
   gem 'securerandom', '~> 0.3'
   gem 'shellwords', '~> 0.2'
   gem 'timeout', '~> 0.4'
