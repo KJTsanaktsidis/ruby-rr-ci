@@ -318,7 +318,9 @@ class JunitXMLEditor
       el['name'] = test_suite
       el['time'] = command.duration.to_s
       unless command.status.success?
-        el.add_element('error', { 'message' => "Command exited with status #{command.status.exitstatus}" })
+        el.add_child('<error />').tap do |err_el,|
+          err_el['message'] = "Command exited with status #{command.status.exitstatus}"
+        end
       end
     end
 
