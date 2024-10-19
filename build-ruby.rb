@@ -310,13 +310,14 @@ class JunitXMLEditor
     self.new(Nokogiri::XML.parse(junit_data))
   end
 
-  def self.from_command_result(test_suite, command)
+  def self.from_command_result(test_suite_name, command)
     doc = Nokogiri::XML::Document.new
     testsuites = doc.add_child('<testsuites/>')
+    test_suite_name = test_suite_name.gsub(/\//, '.').gsub(/\.rb$/, '')
     testsuites.add_child('<testsuite/>').tap do |el,|
-      el['name'] = test_suite
+      el['name'] = test_suite_name
       el.add_child('<testcase />').tap do |tc_el,|
-        tc_el['name'] = test_suite
+        tc_el['name'] = test_suite_name
         tc_el['time'] = command.duration.to_s
         unless command.status.success?
           tc_el.add_child('<error />').tap do |err_el,|
@@ -344,8 +345,8 @@ class JunitXMLEditor
     if @test_task_name
       @doc.root['name'] = @test_task_name
       @doc.xpath('//testsuite').each do |el|
-        # Need to prepend the task name with a dot, for Jenkins' benefit
-        el['name'] = "#{@test_task_name}.#{el['name'].gsub(/\//, '.')}"
+        # Need to dot-separate, for Jenkins' benefit
+        el['name'] = "#{@test_task_name}.#{el['name']}"
       end
     end
 
