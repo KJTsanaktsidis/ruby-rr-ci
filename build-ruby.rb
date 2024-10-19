@@ -331,11 +331,18 @@ class JunitXMLEditor
   end
 
   def attach_file(attach_file)
-    @doc.xpath('//testsuite').first.add_child('<system-err/>').tap do |el, *|
-      el.add_child Nokogiri::XML::Text.new(
-        "--- ATTACHMENT #{attach_file} ---\n[[ATTACHMENT|#{File.absolute_path attach_file}]]\n",
-        @doc
-      )
+    # Attach to every testsuite & testcase in the file so you see it on all the right screens.
+    [*@doc.xpath('//testsuite'), *@doc.xpath('//testcase')].each do |attach_el|
+      attach_el.add_child('<system-err/>').tap do |el, *|
+        el.add_child Nokogiri::XML::Text.new(
+          "--- ATTACHMENT #{attach_file} ---\n" +
+          # Need to add some random junk so that Jenkins does not think this is duplicated,
+          # and actually puts the attachments in both the failing testcases & failing tests.
+          "Cookie: #{SecureRandom.hex 12}\n" +
+          "[[ATTACHMENT|#{File.absolute_path attach_file}]]\n",
+          @doc
+        )
+      end
     end
   end
 
