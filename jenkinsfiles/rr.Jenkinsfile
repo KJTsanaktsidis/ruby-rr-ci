@@ -92,7 +92,7 @@ pipeline {
             --env PERNOSCO_GROUP \
             --env PERNOSCO_USER_SECRET_KEY \
             "$(cat image.txt)" \
-            ../build-ruby.rb --btest --rr
+            ../build-ruby.rb --btest --rr --pernosco
         '''
         sh label: 'make test-tool', script: '''
           podman run --rm \
@@ -110,7 +110,7 @@ pipeline {
             --env PERNOSCO_GROUP \
             --env PERNOSCO_USER_SECRET_KEY \
             "$(cat image.txt)" \
-            ../build-ruby.rb --test-tool --rr
+            ../build-ruby.rb --test-tool --rr --pernosco
         '''
         sh label: 'make test-all', script: '''
           podman run --rm \
@@ -128,7 +128,7 @@ pipeline {
             --env PERNOSCO_GROUP \
             --env PERNOSCO_USER_SECRET_KEY \
             "$(cat image.txt)" \
-            ../build-ruby.rb --test-all --rr
+            ../build-ruby.rb --test-all --rr --pernosco
         '''
       }
     }
