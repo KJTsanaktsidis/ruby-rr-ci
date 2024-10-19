@@ -344,9 +344,9 @@ class JunitXMLEditor
         el['name'] = "#{@test_task_name}.#{el['name']}"
       end
     end
-  end
 
-  @doc.to_xml
+    @doc.to_xml
+  end
 end
 
 def do_build(opts)
