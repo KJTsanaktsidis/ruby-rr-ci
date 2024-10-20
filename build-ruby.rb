@@ -455,6 +455,7 @@ def _run_test(opts, testtask, test_file)
       # (e.g. deliberately exhaust all the FDs); run these tests in slowpoke mode
       # with --no-syscall-buffer.
       *[TESTS_WITHOUT_SYSCALLBUF.include?(relative_test_file) ? '--no-syscall-buffer' : nil].compact,
+      *[opts[:asan] ? '--asan' : nil].compact,
       '--wait', '--disable-avx-512',
       # These are from running `rr cpufeatures` on... _my_ CPU (Tiger Lake, i7-1165G7).
       # Are they a good set of defaults? Who knows.
