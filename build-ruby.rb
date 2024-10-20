@@ -274,10 +274,9 @@ class RecordedCommandExecutor
       t[:tv_nsec] = nanosecs
     end
     itimerspec = Libc::ITimerSpec.new
+    itimerspec[:it_value] = timespec
     if interval
       itimerspec[:it_interval] = timespec
-    else
-      itimerspec[:it_value] = timespec
     end
     ret = Libc.timerfd_settime(timerfd.fileno, 0, itimerspec, nil)
     raise "timerfd_settime failed" unless ret == 0
