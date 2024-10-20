@@ -47,6 +47,8 @@ RUN <<BASHSCRIPT
 
   mkdir /usr/local/asan
   mkdir /usr/local/asan/lib
+
+  mkdir -p ~/patches
 BASHSCRIPT
 
 RUN <<BASHSCRIPT
@@ -94,7 +96,7 @@ RUN <<BASHSCRIPT
   rm -Rf openssl-$OPENSSL_VERSION
 BASHSCRIPT
 
-COPY libffi-unpoison-stack.patch .
+COPY patches/libffi/ patches/libffi/
 RUN <<BASHSCRIPT
   set -ex
 
@@ -109,7 +111,9 @@ RUN <<BASHSCRIPT
 
   # libffi needs this patch not to crash under ASAN
   # See: https://github.com/libffi/libffi/pull/839
-  patch -Np1 -i ~/libffi-unpoison-stack.patch
+  for PATCH in ~/patches/libffi/*.patch; do
+    patch -Np1 -i "$PATCH";
+  done;
 
   mkdir build
   cd build
@@ -160,11 +164,11 @@ RUN <<BASHSCRIPT
   rm -Rf yaml-$LIBYAM_VERSION
 BASHSCRIPT
 
-COPY 0001-Add-a-new-ASAN-exclusion-range.patch .
+COPY patches/rr/ patches/rr/
 RUN <<BASHSCRIPT
   set -ex
 
-  # There are at least five problems with `rr` as packaged in Fedora today:
+  # There are at least seven problems with `rr` as packaged in Fedora today:
   #
   #   1. https://github.com/rr-debugger/rr/issues/3364: the way that debug symbols are stripped
   #      mutilates librrpage.so
@@ -176,16 +180,22 @@ RUN <<BASHSCRIPT
   #      out a bug in signal stack handling during syscalls
   #   5. https://github.com/rr-debugger/rr/issues/3807: vfork again shakes out a nasty deadlock
   #      when rr tries to unmap the exec'd processes address space.
+  #   6. https://github.com/rr-debugger/rr/pull/3855: New clang moved the location of the ASAN
+  #      shadow stack, and rr needs to know about it.
+  #   7. https://github.com/rr-debugger/rr/pull/3856: Chaos mode can put mappings in places where
+  #      its VMA gets merged with the stack VMA, and confuses glibc.
   #
   # Issue no. 1 is a problem in the spec file Fedora is using to build rr. Issues 2, 3, 4, and 5 have
-  # patches merged upstream that are not yet in Fedora
+  # patches merged upstream that are not yet in Fedora. Issues 6 and 7 have open PR's upstream.
   #
   # So, compile our own RR from the (as of now) latest master.
 
   git clone --depth=1 https://github.com/rr-debugger/rr.git
   cd rr
 
-  patch -Np1 -i ~/0001-Add-a-new-ASAN-exclusion-range.patch
+  for PATCH in ~/patches/rr/*.patch; do
+    patch -Np1 -i "$PATCH";
+  done;
 
   mkdir build
   cd build

@@ -380,7 +380,7 @@ def do_build(opts)
   end
 
   puts "=> Applying patches"
-  Dir.glob(File.join(__dir__, 'ruby_patches/*.patch')).each do |patch|
+  Dir.glob(File.join(__dir__, 'patches/ruby/*.patch')).each do |patch|
     sh! 'patch', '-Np1', '-i', patch
   end
 

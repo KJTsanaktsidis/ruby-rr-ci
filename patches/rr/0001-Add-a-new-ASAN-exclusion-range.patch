@@ -1,7 +1,7 @@
-From ba3a06edc87cd67ca8a73c08223ece3396b02298 Mon Sep 17 00:00:00 2001
+From 57f21ef87a1afdcd763f78b5c3849010c21ea7d6 Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Sat, 19 Oct 2024 20:44:31 +1100
-Subject: [PATCH] Add a new ASAN exclusion range
+Subject: [PATCH 1/2] Add a new ASAN exclusion range
 
 Since https://github.com/llvm/llvm-project/commit/fb77ca05ffb4f8e666878f2f6718a9fb4d686839
 they actually moved the region that ASAN uses for its allocator.
