@@ -15,7 +15,7 @@ RUN <<BASHSCRIPT
     # (nope - see below - using nightly)
     # clang compiler-rt
     # For enabling copr
-    envsubst jq
+    gettext-envsubst jq
     # BASERUBY
     ruby-devel ruby-default-gems ruby-bundled-gems rubygem-rexml
     # Ruby build system deps
