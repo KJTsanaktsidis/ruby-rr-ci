@@ -47,10 +47,6 @@ RUN <<BASHSCRIPT
 
   # Nightly Clang is required, it seems (??)
   dnf copr enable -y @fedora-llvm-team/llvm-snapshots
-  repo_file=$(dnf repoinfo --json *llvm-snapshots* | jq -r ".[0].repo_file_path")
-  distname=$(rpm --eval "%{?fedora:fedora}%{?rhel:rhel}") envsubst '$distname' < $repo_file > /tmp/new_repo_file
-  cat /tmp/new_repo_file > $repo_file
-  rm /tmp/new_repo_file
   dnf install --refresh -y clang compiler-rt
 
   git config --global user.name "ruby-rr-ci builder"
