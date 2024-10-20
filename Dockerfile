@@ -14,8 +14,6 @@ RUN <<BASHSCRIPT
     # LLVM toolchain (compiler-rt for ASAN, rust for YJIT)
     # (nope - see below - using nightly)
     # clang compiler-rt
-    # Rust (with a versioned llvm so as not to conflict with nightly clang)
-    rust llvm18-libs
     # BASERUBY
     ruby-devel ruby-default-gems ruby-bundled-gems rubygem-rexml
     # Ruby build system deps
@@ -48,6 +46,9 @@ RUN <<BASHSCRIPT
   # Nightly Clang is required, it seems (??)
   dnf copr enable -y @fedora-llvm-team/llvm-snapshots
   dnf install --refresh -y clang compiler-rt
+
+  # Now _carefully_ install rust with llvm18
+  dnf install -y rust llvm18-libs
 
   git config --global user.name "ruby-rr-ci builder"
   git config --global user.email "ruby-rr-ci-builder@$(hostname)"
