@@ -14,12 +14,12 @@ RUN <<BASHSCRIPT
     # LLVM toolchain (compiler-rt for ASAN, rust for YJIT)
     # (nope - see below - using nightly)
     # clang compiler-rt
-    # For enabling copr
-    gettext-envsubst jq
+    # Rust (with a versioned llvm so as not to conflict with nightly clang)
+    rust llvm18-libs
     # BASERUBY
     ruby-devel ruby-default-gems ruby-bundled-gems rubygem-rexml
     # Ruby build system deps
-    make autoconf diffutils gperf rust
+    make autoconf diffutils gperf
     # Ruby's build dependency libraries
     # Need the -devel versions, even though we have copies in /usr/local/asan, because
     # we didn't copy the headers there.
