@@ -46,7 +46,7 @@ RUN <<BASHSCRIPT
   dnf builddep -y openssl libyaml libffi rr
 
   # Nightly Clang is required, it seems (??)
-  dnf copr enable @fedora-llvm-team/llvm-snapshots
+  dnf copr enable -y @fedora-llvm-team/llvm-snapshots
   repo_file=$(dnf repoinfo --json *llvm-snapshots* | jq -r ".[0].repo_file_path")
   distname=$(rpm --eval "%{?fedora:fedora}%{?rhel:rhel}") envsubst '$distname' < $repo_file > /tmp/new_repo_file
   cat /tmp/new_repo_file > $repo_file
