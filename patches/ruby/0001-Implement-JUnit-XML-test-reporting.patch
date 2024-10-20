@@ -1,7 +1,7 @@
-From 8b889144fc14158de9eb24a6f482a3fdbd0efee8 Mon Sep 17 00:00:00 2001
+From 66b13bc95977213b9e235720068346339a361032 Mon Sep 17 00:00:00 2001
 From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
 Date: Mon, 22 Jul 2024 12:20:30 +1000
-Subject: [PATCH] Implement JUnit XML test reporting
+Subject: [PATCH 1/2] Implement JUnit XML test reporting
 
 ---
  tool/lib/junit_xml_output.rb | 126 +++++++++++++++++++++++++++++++++++
