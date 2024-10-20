@@ -12,11 +12,14 @@ RUN <<BASHSCRIPT
     # Provies `rpmbuild` (used for unpacking srpms) and rpmspec
     rpm-build rpmspectool
     # LLVM toolchain (compiler-rt for ASAN, rust for YJIT)
-    clang compiler-rt rust
+    # (nope - see below - using nightly)
+    # clang compiler-rt
+    # For enabling copr
+    envsubst jq
     # BASERUBY
     ruby-devel ruby-default-gems ruby-bundled-gems rubygem-rexml
     # Ruby build system deps
-    make autoconf diffutils gperf
+    make autoconf diffutils gperf rust
     # Ruby's build dependency libraries
     # Need the -devel versions, even though we have copies in /usr/local/asan, because
     # we didn't copy the headers there.
@@ -41,6 +44,14 @@ RUN <<BASHSCRIPT
   dnf update --refresh -y
   dnf install -y "${PACKAGES[@]}"
   dnf builddep -y openssl libyaml libffi rr
+
+  # Nightly Clang is required, it seems (??)
+  dnf copr enable @fedora-llvm-team/llvm-snapshots
+  repo_file=$(dnf repoinfo --json *llvm-snapshots* | jq -r ".[0].repo_file_path")
+  distname=$(rpm --eval "%{?fedora:fedora}%{?rhel:rhel}") envsubst '$distname' < $repo_file > /tmp/new_repo_file
+  cat /tmp/new_repo_file > $repo_file
+  rm /tmp/new_repo_file
+  dnf install --refresh -y clang compiler-rt
 
   git config --global user.name "ruby-rr-ci builder"
   git config --global user.email "ruby-rr-ci-builder@$(hostname)"
