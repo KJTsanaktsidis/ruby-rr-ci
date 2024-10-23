@@ -201,6 +201,7 @@ RUN <<BASHSCRIPT
   git clone --depth=1 https://github.com/rr-debugger/rr.git
   cd rr
 
+  shopt -s nullglob;
   for PATCH in ~/patches/rr/*.patch; do
     patch -Np1 -i "$PATCH";
   done;
