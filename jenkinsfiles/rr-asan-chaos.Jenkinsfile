@@ -5,7 +5,7 @@ pipeline {
     cron 'H/30 * * * *'
   }
   options {
-    buildDiscarder(logRotator(numToKeepStr: '500', artifactNumToKeepStr: '500'))
+    buildDiscarder(logRotator(numToKeepStr: '500', artifactNumToKeepStr: '10'))
     disableConcurrentBuilds()
   }
   // Explicitly specify a node, we're depending on the same podman container image being
