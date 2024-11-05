@@ -219,6 +219,13 @@ class RecordedCommandExecutor
           end
           hard_kill_deadline = nil
         end
+        if hard_kill_deadline.nil?
+          # DEBUG: Why isn't this exiting??
+          log "Timer fired after hard kill deadline."
+          log "Any pids? #{cgroup_pids.inspect}"
+          log "pidfd_exited? #{pidfd_exited}"
+          log "pipe_r closed? #{@pipe_r.closed?}"
+        end
       end
     end
 
