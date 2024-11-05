@@ -4,19 +4,21 @@ require 'bundler/inline'
 gemfile do
   source 'https://rubygems.org'
 
-  gem 'erb', '~> 4'
-  gem 'fileutils', '~> 1'
-  gem 'open3', '~> 0.2'
-  gem 'optparse', '~> 0.5'
-  gem 'pathname', '~> 0.3'
-  gem 'securerandom', '~> 0.3'
-  gem 'shellwords', '~> 0.2'
-  gem 'timeout', '~> 0.4'
-  gem 'tmpdir', '~> 0.2'
-
   gem 'ffi', '~> 1'
   gem 'nokogiri', '~> 1.16'
 end
+
+# Default gems need to be required, not depended on, when using bundler/inline
+# because bundler itself might have already required them. We don't really need
+# specific versions anyway.
+require 'erb'
+require 'fileutils'
+require 'open3'
+require 'optparse'
+require 'pathname'
+require 'securerandom'
+require 'timeout'
+require 'tmpdir'
 
 $stdout.sync = true
 CONFIGURE_FLAGS = %w[--disable-install-doc --enable-yjit]
