@@ -43,12 +43,13 @@ RUN <<BASHSCRIPT
   dnf install -y "${PACKAGES[@]}"
   dnf builddep -y openssl libyaml libffi rr
 
-  # Nightly Clang is required, it seems (??)
+  # Clang 20 is required, it seems, for Ruby and ASAN and rr to play nice (??)
   dnf copr enable -y @fedora-llvm-team/llvm-snapshots
   dnf install --refresh -y clang compiler-rt
 
-  # Now _carefully_ install rust with llvm18
-  dnf install -y rust llvm18-libs
+  # Install Rust via rustup, because distro rust will downgrade llvm to v19
+  dnf install -y rustup
+  RUSTUP_HOME=/opt/rustup rustup-init -y --default-toolchain stable
 
   git config --global user.name "ruby-rr-ci builder"
   git config --global user.email "ruby-rr-ci-builder@$(hostname)"
@@ -58,6 +59,9 @@ RUN <<BASHSCRIPT
 
   mkdir -p ~/patches
 BASHSCRIPT
+
+# The rust toolchain needs to be added to $PATH
+ENV PATH="$PATH:/opt/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin"
 
 RUN <<BASHSCRIPT
   set -ex
@@ -69,7 +73,7 @@ RUN <<BASHSCRIPT
   cd ~/rpmbuild
   OPENSSL_VERSION="$(rpmspec --query --srpm  --qf "%{version}\n" SPECS/openssl.spec)"
   rpmbuild -bp SPECS/openssl.spec
-  cd BUILD/openssl-$OPENSSL_VERSION
+  cd BUILD/openssl-$OPENSSL_VERSION-build/openssl-$OPENSSL_VERSION
 
   mkdir build
   cd build
@@ -115,7 +119,7 @@ RUN <<BASHSCRIPT
   cd ~/rpmbuild
   LIBFFI_VERSION="$(rpmspec --query --srpm  --qf "%{version}\n" SPECS/libffi.spec)"
   rpmbuild -bp SPECS/libffi.spec
-  cd BUILD/libffi-$LIBFFI_VERSION
+  cd BUILD/libffi-$LIBFFI_VERSION-build/libffi-$LIBFFI_VERSION
 
   # libffi needs this patch not to crash under ASAN
   # See: https://github.com/libffi/libffi/pull/839
@@ -152,7 +156,7 @@ RUN <<BASHSCRIPT
   cd ~/rpmbuild
   LIBYAML_VERSION="$(rpmspec --query --srpm  --qf "%{version}\n" SPECS/libyaml.spec)"
   rpmbuild -bp SPECS/libyaml.spec
-  cd BUILD/yaml-$LIBYAML_VERSION
+  cd BUILD/libyaml-$LIBYAML_VERSION-build/yaml-$LIBYAML_VERSION
 
   mkdir build
   cd build
