@@ -156,7 +156,7 @@ class RecordedCommandExecutor
     loop do
       # We want to stop this loop when both stdout is drained and
       # the cgroup we were monitoring is empty
-      break if @pipe_r.closed? && pidfd_exited && cgroup_pids.empty?
+      break if @pipe_r.closed? && pidfd_exited && live_cgroup_pids.empty?
       readable, _, _ = IO.select(ios)
 
       if readable.include?(@pipe_r)
@@ -186,7 +186,7 @@ class RecordedCommandExecutor
         kill_cgroup
 
         # And because we did that, we should disable the timeout and put the every-second timer
-        # into ios to have it keep checking if cgroup_pids.empty? above
+        # into ios to have it keep checking if live_cgroup_pids.empty? above
         arm_timerfd(@cgpid_poll_timerfd, 0.5, interval: true)
       end
 
@@ -197,7 +197,7 @@ class RecordedCommandExecutor
         # Send SIGABRT to everybod to hopefully get a nice clean Ruby stack trace of anything
         # still open. This does _not_ kill rr, which should then hopefully cleanly exit with
         # a complete trace
-        pids = cgroup_pids
+        pids = live_cgroup_pids
         log "Sending SIGABRT to #{pids.inspect} from #{@cgroup}"
         pids.each { Process.kill :SIGABRT, _1 rescue nil }
 
@@ -209,12 +209,12 @@ class RecordedCommandExecutor
       if readable.include?(@cgpid_poll_timerfd)
         @cgpid_poll_timerfd.read_nonblock(8)
 
-        # The main purpose of this timer is actually to re-check the cgroup_pids.empty?
+        # The main purpose of this timer is actually to re-check the live_cgroup_pids.empty?
         # condition above. But the second purpose is to decide to hard-kill if the timeout
         # expired.
         if hard_kill_deadline && hard_kill_deadline > Process.clock_gettime(Process::CLOCK_MONOTONIC)
           # Need to check again because the pids might have exited while we were blocked in IO.select
-          pids = cgroup_pids
+          pids = live_cgroup_pids
           if pids.any?
             log "Gave up waiting after 10 seconds (#{pids.size} pid(s) remain). Killing cgroup #{@cgroup}."
             kill_cgroup
@@ -225,6 +225,7 @@ class RecordedCommandExecutor
           # DEBUG: Why isn't this exiting??
           log "Timer fired after hard kill deadline."
           log "Any pids? #{cgroup_pids.inspect}"
+          log "Live pids? #{live_cgroup_pids.inspect}"
           log "pidfd_exited? #{pidfd_exited}"
           log "pipe_r closed? #{@pipe_r.closed?}"
         end
@@ -245,7 +246,7 @@ class RecordedCommandExecutor
   def close
     # unconditionally delete everything in the cgroup.
     kill_cgroup
-    sleep 0.5 until cgroup_pids.empty?
+    sleep 0.5 until live_cgroup_pids.empty?
     Dir.rmdir File.join("/sys/fs/cgroup", @cgroup)
 
     # If we hadn't reaped our process, do that.
@@ -294,6 +295,21 @@ class RecordedCommandExecutor
 
   def cgroup_pids
     File.read(File.join("/sys/fs/cgroup", @cgroup, "cgroup.procs")).lines.map { _1.strip.to_i }
+  end
+
+  # Filter out zombies from cgroup_pids
+  def live_cgroup_pids
+    cgroup_pids.select do |pid|
+      status_data = File.read(File.join("/proc", pid, "status"))
+      state_line = status_data.lines.find { _1.start_with?("Status:") }
+      if state_line =~ /Status:\s*([A-Za-z])/
+        $1 != "Z"
+      else
+        false
+      end
+    rescue
+      false
+    end
   end
 
   def kill_cgroup
