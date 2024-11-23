@@ -48,7 +48,7 @@ pipeline {
     }
     stage('Build testing image') {
       steps {
-        sh label: 'podman build', script: 'podman build --iidfile image.txt --build-arg CC=clang18 .'
+        sh label: 'podman build', script: 'podman build --iidfile image.txt --build-arg CC=clang-18 .'
       }
     }
     stage('Build ruby') {
@@ -69,7 +69,7 @@ pipeline {
             --env PERNOSCO_GROUP \
             --env PERNOSCO_USER_SECRET_KEY \
             "$(cat image.txt)" \
-            ../build-ruby.rb --build --cc clang18
+            ../build-ruby.rb --build --cc clang-18
         '''
       }
     }
