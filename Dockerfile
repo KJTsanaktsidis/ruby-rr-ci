@@ -210,6 +210,7 @@ RUN <<BASHSCRIPT
 
   mkdir build
   cd build
+  unset CC
   cmake \
     -DCMAKE_INSTALL_PREFIX:PATH=/usr/local \
     -DCMAKE_BUILD_TYPE=Release \
