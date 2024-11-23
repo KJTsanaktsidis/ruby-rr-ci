@@ -421,7 +421,7 @@ def do_build(opts)
     if opts[:asan]
       debugflags << "-fsanitize=address"
       ldflags << "-Wl,-rpath=/usr/local/asan/lib -L/usr/local/asan/lib"
-      configure_flags << "CC=clang"
+      configure_flags << "CC=#{opts[:cc]}"
       cppflags << "-DUSE_MN_THREADS=0"
     end
     sh! '../configure', *configure_flags,
@@ -630,7 +630,8 @@ options = {
   pernosco: false,
   chaos: false,
   cgroup_base: nil,
-  test_timeout: 60 * 30
+  test_timeout: 60 * 30,
+  cc: 'clang'
 }
 OptionParser.new do |opts|
   opts.banner = "Usage: ruby_build.rb --build | --btest | --test | --spec"
@@ -665,6 +666,9 @@ OptionParser.new do |opts|
   end
   opts.on('--test-timeout=TIMEOUT', 'Time out individual test file runs (sconds)') do |timeout|
     options[:test_timeout] = timeout.to_i
+  end
+  opts.on('--cc', 'Compile with $CC=this') do |cc|
+    options[:cc] = cc
   end
 end.parse!
 

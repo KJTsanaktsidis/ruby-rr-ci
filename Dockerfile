@@ -1,6 +1,7 @@
 FROM quay.io/fedora/fedora:41
 
 WORKDIR /root
+ARG CC=clang
 
 # Relevant RPM building utilities
 RUN <<BASHSCRIPT
@@ -14,6 +15,8 @@ RUN <<BASHSCRIPT
     # LLVM toolchain (compiler-rt for ASAN, rust for YJIT)
     # On Fedora 41, this installs LLVM19.
     clang compiler-rt rustc cargo
+    # Testing something out with clang 18
+    clang18
     # BASERUBY
     ruby-devel ruby-default-gems ruby-bundled-gems rubygem-rexml
     # Ruby build system deps
@@ -86,7 +89,7 @@ RUN <<BASHSCRIPT
     enable-cms enable-md2 enable-rc5 no-mdc2 no-ec2m no-sm2 no-sm4 \
     shared no-tests no-apps disable-fips \
     $(rpm --define 'toolchain clang' --eval "%{build_cflags} %{build_ldflags}") \
-    CC=clang \
+    CC="$CC" \
     -D_GNU_SOURCE -DPURIFY -O2 -ggdb3 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer \
     -fno-lto -Wl,--allow-multiple-definition -Wl,-rpath=/usr/local/asan/lib/
   make -j
@@ -124,7 +127,7 @@ RUN <<BASHSCRIPT
     --prefix=/usr \
     --enable-shared \
     --enable-debug \
-    CC=clang \
+    CC="$CC" \
     CFLAGS="$(rpm --define 'toolchain clang' --eval "%{build_cflags} -fsanitize=address -fno-lto")" \
     LDFLAGS="$(rpm --define 'toolchain clang' --eval "%{build_ldflags} -fsanitize=address -fno-lto -Wl,-rpath=/usr/local/asan/lib")"
   make -j
@@ -154,7 +157,7 @@ RUN <<BASHSCRIPT
   ../configure \
     --prefix=/usr \
     --enable-shared \
-    CC=clang \
+    CC="$CC" \
     CFLAGS="$(rpm --define 'toolchain clang' --eval "%{build_cflags} -fsanitize=address -fno-lto")" \
     LDFLAGS="$(rpm --define 'toolchain clang' --eval "%{build_ldflags} -fsanitize=address -fno-lto -Wl,-rpath=/usr/local/asan/lib")"
   make -j
