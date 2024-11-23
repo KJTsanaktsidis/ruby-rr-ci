@@ -1,0 +1,44 @@
+From 661dc8ae64b6d6ae8491c0723e68a9aeebcea06f Mon Sep 17 00:00:00 2001
+From: KJ Tsanaktsidis <kj@kjtsanaktsidis.id.au>
+Date: Sat, 16 Nov 2024 22:43:22 +1100
+Subject: [PATCH] Schedule tasks where we've seen but not processed
+ PTRACE_EVENT_EXIT
+
+If we see the PTRACE_EVENT_EXIT for a task while running a different
+task in unlimited-ticks mode in `Scheduler::reschedule`, it looks like
+nothing ever actually calls `handle_ptrace_exit_event` on it, and so
+nothing ever PTRACE_CONT's the task out of the exit-stop and into the
+zombie state.
+
+This seems to manifest itself as rr not reaping processes properly when
+they receive asynchronous core-dumping signals (e.g. SIGSEGV sent by
+`raise` or `kill`).
+
+Fix this issue by checking if there's a pending PTRACE_EVENT_EXIT to
+deal with on the task in `Scheduler::is_task_runnable`, and allowing the
+task to be executed if so.
+
+Fixes #3882
+---
+ src/Scheduler.cc | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/Scheduler.cc b/src/Scheduler.cc
+index d94d9f3e..366c01e8 100644
+--- a/src/Scheduler.cc
++++ b/src/Scheduler.cc
+@@ -349,7 +349,10 @@ bool Scheduler::is_task_runnable(RecordTask* t, WaitAggregator& wait_aggregator,
+     }
+   }
+ 
+-  if (t->waiting_for_ptrace_exit && !t->was_reaped()) {
++  if (t->seen_ptrace_exit_event() && !t->handled_ptrace_exit_event()) {
++    LOGM(debug) << "  " << t->tid << " has a pending PTRACE_EVENT_EXIT to process; we can run it";
++    return true;
++  } else if (t->waiting_for_ptrace_exit && !t->was_reaped()) {
+     LOGM(debug) << "  " << t->tid << " is waiting to exit; checking status ...";
+   } else if (t->is_stopped() || t->was_reaped()) {
+     LOGM(debug) << "  " << t->tid << "  was already stopped with status " << t->status();
+-- 
+2.47.0
+

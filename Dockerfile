@@ -198,6 +198,9 @@ RUN <<BASHSCRIPT
   #      its VMA gets merged with the stack VMA, and confuses glibc.
   #   8. https://github.com/rr-debugger/rr/pull/3874: A problem in SIGSTOP/SIGCONT hangling
   #      that affects Ruby's TestSignal#test_stop_self test.
+  #   9. https://github.com/rr-debugger/rr/pull/3883: When a multithreaded task gets an async
+  #      SIGABRT or SIGSEGV signal, if you're unlucky rr can wind up never actually reaping the
+  #      zombie.
   #
   # Issue no. 1 is a problem in the spec file Fedora is using to build rr. The rest have patches
   # merged upstream that are not yet in Fedora.
