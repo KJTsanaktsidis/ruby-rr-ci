@@ -12,8 +12,8 @@ RUN <<BASHSCRIPT
     # Provies `rpmbuild` (used for unpacking srpms) and rpmspec
     rpm-build rpmspectool
     # LLVM toolchain (compiler-rt for ASAN, rust for YJIT)
-    # (nope - see below - using nightly)
-    # clang compiler-rt
+    # On Fedora 41, this installs LLVM19.
+    clang compiler-rt rustc cargo
     # BASERUBY
     ruby-devel ruby-default-gems ruby-bundled-gems rubygem-rexml
     # Ruby build system deps
@@ -43,14 +43,6 @@ RUN <<BASHSCRIPT
   dnf install -y "${PACKAGES[@]}"
   dnf builddep -y openssl libyaml libffi rr
 
-  # Clang 20 is required, it seems, for Ruby and ASAN and rr to play nice (??)
-  dnf copr enable -y @fedora-llvm-team/llvm-snapshots
-  dnf install --refresh -y clang compiler-rt
-
-  # Install Rust via rustup, because distro rust will downgrade llvm to v19
-  dnf install -y rustup
-  RUSTUP_HOME=/opt/rustup rustup-init -y --default-toolchain stable
-
   git config --global user.name "ruby-rr-ci builder"
   git config --global user.email "ruby-rr-ci-builder@$(hostname)"
 
@@ -60,8 +52,6 @@ RUN <<BASHSCRIPT
   mkdir -p ~/patches
 BASHSCRIPT
 
-# The rust toolchain needs to be added to $PATH
-ENV PATH="$PATH:/opt/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin"
 
 RUN <<BASHSCRIPT
   set -ex
